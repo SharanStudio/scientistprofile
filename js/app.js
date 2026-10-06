@@ -257,7 +257,7 @@ async function viewEntry(key, id) {
       const { start_date, end_date, before_joining, ...rest } = v;
       const data = sec.finalise ? sec.finalise(rest) : rest;
       const row = { section: key, start_date, end_date: end_date || null,
-        ongoing: !!sec.ongoingIfBlank && !end_date, before_joining: !!before_joining, data };
+        ongoing: sec.ongoingFrom ? !!sec.ongoingFrom(data) : (!!sec.ongoingIfBlank && !end_date), before_joining: !!before_joining, data };
       if (!entry && sec.dupKey && !dupBox.dataset.ok) {
         const k = sec.dupKey(row);
         if (existing.some((e) => sec.dupKey(e) === k)) {

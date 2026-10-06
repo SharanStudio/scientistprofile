@@ -129,7 +129,7 @@ export function buildForm(fields, initial = {}) {
       const val = vals[f.key];
       const empty = val === null || val === '' || val === undefined || (f.type === 'checkbox' && false);
       if (isVisible(f, vals)) {
-        if (f.required && empty) msg = f.type === 'multicheck' || f.type === 'select' ? 'Choose an option.' : 'This field is required.';
+        if ((f.required || (f.requiredIf && f.requiredIf(vals))) && empty) msg = f.type === 'multicheck' || f.type === 'select' ? 'Choose an option.' : 'This field is required.';
         else if (!empty) {
           if (f.type === 'date') {
             if (val < MIN_DATE) msg = 'Check the year. This date is too early.';

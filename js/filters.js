@@ -11,11 +11,11 @@ export function lastCY(t = today()) {
   return [`${y}-01-01`, `${y}-12-31`];
 }
 
-// Does the entry touch [from, to]? A blank end date means a single day, or ongoing for programme support.
+// Does the entry touch [from, to]? Ongoing entries stay open-ended whatever end date they carry; otherwise a blank end date means a single day.
 export function overlaps(e, from, to) {
   const s = e.start_date;
   if (!s) return false;
-  const end = e.end_date || (e.ongoing ? '9999-12-31' : s);
+  const end = e.ongoing ? '9999-12-31' : (e.end_date || s);
   return (!to || s <= to) && (!from || end >= from);
 }
 

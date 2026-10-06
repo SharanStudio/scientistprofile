@@ -1,4 +1,5 @@
 import { STATES } from './states.js';
+import { today } from './dom.js';
 
 // Each section: label, fields, and a one-line summary used in lists and in the Word export.
 // Field keys that start with col: are stored in table columns (start_date, end_date); the rest go into data (jsonb).
@@ -187,7 +188,7 @@ export const SECTIONS = {
     label: 'Projects',
     blurb: 'As PI / joint PI or co-investigator',
     enabled: true,
-    ongoingIfBlank: true,
+    ongoingFrom: (d) => d.status === 'Ongoing',
     fields: [
       { key: 'role', type: 'select', label: 'Your role', required: true, options: ['PI / joint PI', 'Co-investigator'] },
       { key: 'name', type: 'textarea', label: 'Name of the project', required: true, rows: 2, max: 400 },
@@ -195,18 +196,28 @@ export const SECTIONS = {
       { key: 'collab', type: 'textarea', label: 'Collaborating institutes / organizations / programs', rows: 2, max: 300 },
       { key: 'area', type: 'select', label: 'Priority area', required: true, options: ['Communicable disease', 'NCD', 'Mental health', 'Child health', 'Others'] },
       { key: 'area_other', type: 'text', label: 'Name of the priority area', required: true, max: 120, showIf: (v) => v.area === 'Others' },
-      { key: 'start_date', col: true, type: 'date', label: 'Date the project was initiated', required: true, noFuture: true },
-      { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank if the project is ongoing.' },
       { key: 'multi', type: 'select', label: 'Multi-centre study', required: true, options: ['Yes', 'No'] },
       { key: 'funder', type: 'text', label: 'Funder name', required: true, max: 250 },
-      { key: 'total', type: 'int', label: 'Total funding (INR)', required: true, min: 0 },
-      { key: 'fund_fy', type: 'int', label: 'Funding in last financial year (INR)', min: 0,
-        help: 'Enter the figure by hand. Update it before each Word download.' },
-      { key: 'fund_cy', type: 'int', label: 'Funding in last calendar year (INR)', min: 0,
-        help: 'Enter the figure by hand. Update it before each Word download.' },
+      { key: 'total', type: 'text', label: 'Total project funding (INR)', required: true, max: 20,
+        help: 'Amount in rupees, for example 1691500 or 16,91,500.',
+        pattern: /^[₹\s]*\d[\d,\s]*$/, patternMsg: 'Enter the amount in rupees, using digits only.',
+        norm: (x) => x.replace(/\D/g, '') },
+      { key: 'status', type: 'select', label: 'Status', required: true, options: ['Ongoing', 'Completed'] },
+      { key: 'start_date', col: true, type: 'date', label: 'Start date', required: true, noFuture: true },
+      { key: 'end_date', col: true, type: 'date', label: 'End date',
+        requiredIf: (v) => v.status === 'Completed',
+        help: 'Completed: the actual end date (required). Ongoing: the expected end date, if known.',
+        check: (val, v) => (v.status === 'Completed' && val > today() ? 'A completed project cannot end in the future.' : '') },
     ],
     finalise: (d) => ({ ...d, area_name: d.area === 'Others' ? d.area_other : d.area }),
-    summary: (e) => `${e.data.role === 'Co-investigator' ? 'Co-I' : 'PI'}: ${e.data.name} – ${e.data.funder} (${e.data.type}), ₹ ${Number(e.data.total || 0).toLocaleString('en-IN')}; ${e.end_date ? `${fmtDate(e.start_date)}–${fmtDate(e.end_date)}` : `from ${fmtDate(e.start_date)}, ongoing`}`,
+    summary: (e) => {
+      const d = e.data;
+      const status = d.status || (e.ongoing ? 'Ongoing' : 'Completed');
+      const when = status === 'Ongoing'
+        ? `ongoing since ${fmtDate(e.start_date)}${e.end_date ? ` (expected end ${fmtDate(e.end_date)})` : ''}`
+        : `completed, ${fmtDate(e.start_date)}–${fmtDate(e.end_date)}`;
+      return `${d.role === 'Co-investigator' ? 'Co-I' : 'PI'}: ${d.name} – ${d.funder} (${d.type}), ₹ ${Number(d.total || 0).toLocaleString('en-IN')}; ${when}`;
+    },
     dupKey: (e) => (e.data.name || '').toLowerCase().slice(0, 80),
   },
   recognition: {
@@ -311,7 +322,7 @@ export const PROFILE_FIELDS = [
 
 // Filter dropdowns shown on each section page. Options come from the entries you have saved.
 const FILTERS = {
-  project: [{ key: 'role', label: 'Your role' }, { key: 'type', label: 'Funding type' }, { key: 'area_name', label: 'Priority area' }, { key: 'multi', label: 'Multi-centre' }],
+  project: [{ key: 'role', label: 'Your role' }, { key: 'status', label: 'Status' }, { key: 'type', label: 'Funding type' }, { key: 'area_name', label: 'Priority area' }, { key: 'multi', label: 'Multi-centre' }],
   award: [{ key: 'level', label: 'Level' }],
   innovation: [{ key: 'patent', label: 'Patent status' }],
   service: [{ key: 'kind', label: 'Kind' }],
