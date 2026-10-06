@@ -183,6 +183,111 @@ export const SECTIONS = {
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.citation}`,
     dupKey: (e) => (e.data.doi || (e.data.citation || '').toLowerCase().slice(0, 80)),
   },
+  project: {
+    label: 'Projects',
+    blurb: 'As PI / joint PI or co-investigator',
+    enabled: true,
+    ongoingIfBlank: true,
+    fields: [
+      { key: 'role', type: 'select', label: 'Your role', required: true, options: ['PI / joint PI', 'Co-investigator'] },
+      { key: 'name', type: 'textarea', label: 'Name of the project', required: true, rows: 2, max: 400 },
+      { key: 'type', type: 'select', label: 'Funding type', required: true, options: ['Intramural', 'Extramural national', 'Extramural international'] },
+      { key: 'collab', type: 'textarea', label: 'Collaborating institutes / organizations / programs', rows: 2, max: 300 },
+      { key: 'area', type: 'select', label: 'Priority area', required: true, options: ['Communicable disease', 'NCD', 'Mental health', 'Child health', 'Others'] },
+      { key: 'area_other', type: 'text', label: 'Name of the priority area', required: true, max: 120, showIf: (v) => v.area === 'Others' },
+      { key: 'start_date', col: true, type: 'date', label: 'Date the project was initiated', required: true, noFuture: true },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank if the project is ongoing.' },
+      { key: 'multi', type: 'select', label: 'Multi-centre study', required: true, options: ['Yes', 'No'] },
+      { key: 'funder', type: 'text', label: 'Funder name', required: true, max: 250 },
+      { key: 'total', type: 'int', label: 'Total funding (INR)', required: true, min: 0 },
+      { key: 'fund_fy', type: 'int', label: 'Funding in last financial year (INR)', min: 0,
+        help: 'Enter the figure by hand. Update it before each Word download.' },
+      { key: 'fund_cy', type: 'int', label: 'Funding in last calendar year (INR)', min: 0,
+        help: 'Enter the figure by hand. Update it before each Word download.' },
+    ],
+    finalise: (d) => ({ ...d, area_name: d.area === 'Others' ? d.area_other : d.area }),
+    summary: (e) => `${e.data.role === 'Co-investigator' ? 'Co-I' : 'PI'}: ${e.data.name} – ${e.data.funder} (${e.data.type}), ₹ ${Number(e.data.total || 0).toLocaleString('en-IN')}; ${e.end_date ? `${fmtDate(e.start_date)}–${fmtDate(e.end_date)}` : `from ${fmtDate(e.start_date)}, ongoing`}`,
+    dupKey: (e) => (e.data.name || '').toLowerCase().slice(0, 80),
+  },
+  recognition: {
+    label: 'Recognition',
+    blurb: 'International standing, WHO centres, accreditations',
+    enabled: true,
+    fields: [
+      { key: 'details', type: 'textarea', label: 'Details', required: true, rows: 3, max: 600 },
+      { key: 'start_date', col: true, type: 'date', label: 'Date received', required: true, noFuture: true },
+    ],
+    summary: (e) => `${fmtDate(e.start_date)}: ${e.data.details}`,
+    dupKey: (e) => [e.start_date, (e.data.details || '').toLowerCase().slice(0, 60)].join('|'),
+  },
+  award: {
+    label: 'Awards and honours',
+    blurb: 'Awards received since joining',
+    enabled: true,
+    fields: [
+      { key: 'name', type: 'text', label: 'Name of the award', required: true, max: 300 },
+      { key: 'level', type: 'select', label: 'Level', required: true, options: ['Institute', 'National', 'International'] },
+      { key: 'start_date', col: true, type: 'date', label: 'Date received', required: true, noFuture: true },
+    ],
+    summary: (e) => `${fmtDate(e.start_date)}: ${e.data.name} (${e.data.level})`,
+    dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
+  },
+  notable: {
+    label: 'Notable contributions',
+    blurb: 'Key findings from studies you led',
+    enabled: true,
+    ongoingIfBlank: true,
+    fields: [
+      { key: 'details', type: 'textarea', label: 'Details', required: true, rows: 6, max: 1200,
+        help: 'Key findings from key studies or projects you led.' },
+      { key: 'start_date', col: true, type: 'date', label: 'Start date', required: true, noFuture: true },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank if the contribution is continuing.' },
+    ],
+    summary: (e) => `${e.end_date ? `${fmtDate(e.start_date)}–${fmtDate(e.end_date)}` : `From ${fmtDate(e.start_date)}`}: ${e.data.details}`,
+    dupKey: (e) => [e.start_date, (e.data.details || '').toLowerCase().slice(0, 60)].join('|'),
+  },
+  innovation: {
+    label: 'Innovations and patents',
+    blurb: 'Technologies, products, patents',
+    enabled: true,
+    ongoingIfBlank: true,
+    fields: [
+      { key: 'name', type: 'text', label: 'Name of the technology / product', required: true, max: 300 },
+      { key: 'area', type: 'text', label: 'Area', required: true, max: 200 },
+      { key: 'patent', type: 'select', label: 'Patent status', required: true, options: ['Not filed', 'Filed', 'Under process', 'Granted'] },
+      { key: 'tech', type: 'text', label: 'Tech transfer / commercialised (company name)', max: 250,
+        help: 'Leave blank if it is not commercialised.' },
+      { key: 'start_date', col: true, type: 'date', label: 'Start date', required: true, noFuture: true },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank if the work is continuing.' },
+    ],
+    summary: (e) => `${e.data.name} (${e.data.area}) – patent: ${e.data.patent}${e.data.tech ? `; ${e.data.tech}` : ''}`,
+    dupKey: (e) => (e.data.name || '').toLowerCase(),
+  },
+  service: {
+    label: 'Services provided',
+    blurb: 'Technology validation, diagnostics, clinical support',
+    enabled: true,
+    fields: [
+      { key: 'kind', type: 'select', label: 'What was it?', required: true, options: ['Validation of technology', 'Diagnostics', 'Clinical support'] },
+      { key: 'tech_name', type: 'text', label: 'Name of the technology', required: true, max: 250, showIf: (v) => v.kind === 'Validation of technology' },
+      { key: 'tech_area', type: 'text', label: 'Area', required: true, max: 200, showIf: (v) => v.kind === 'Validation of technology' },
+      { key: 'firm', type: 'text', label: 'Firm / company', required: true, max: 250, showIf: (v) => v.kind === 'Validation of technology' },
+      { key: 'dx_condition', type: 'text', label: 'Name of the disease / health condition', required: true, max: 250, showIf: (v) => v.kind === 'Diagnostics' },
+      { key: 'dx_test', type: 'text', label: 'Type of testing', required: true, max: 250, showIf: (v) => v.kind === 'Diagnostics' },
+      { key: 'dx_samples', type: 'int', label: 'Number of samples', required: true, min: 0, showIf: (v) => v.kind === 'Diagnostics' },
+      { key: 'cs_condition', type: 'text', label: 'Name of the disease / health condition', required: true, max: 250, showIf: (v) => v.kind === 'Clinical support' },
+      { key: 'cs_support', type: 'text', label: 'Type of support', required: true, max: 250, showIf: (v) => v.kind === 'Clinical support' },
+      { key: 'cs_patients', type: 'int', label: 'Number of patients', required: true, min: 0, showIf: (v) => v.kind === 'Clinical support' },
+      { key: 'start_date', col: true, type: 'date', label: 'Start date', required: true, noFuture: true, showIf: (v) => !!v.kind },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank for a single day.', noFuture: true, showIf: (v) => !!v.kind },
+    ],
+    finalise: (d) => ({
+      ...d,
+      name: d.kind === 'Validation of technology' ? d.tech_name : d.kind === 'Diagnostics' ? d.dx_condition : d.cs_condition,
+    }),
+    summary: (e) => `${rangeText(e)}: ${e.data.kind} – ${e.data.name}`,
+    dupKey: (e) => [e.start_date, e.data.kind, (e.data.name || '').toLowerCase()].join('|'),
+  },
 };
 
 export const PROFILE_FIELDS = [
@@ -206,6 +311,10 @@ export const PROFILE_FIELDS = [
 
 // Filter dropdowns shown on each section page. Options come from the entries you have saved.
 const FILTERS = {
+  project: [{ key: 'role', label: 'Your role' }, { key: 'type', label: 'Funding type' }, { key: 'area_name', label: 'Priority area' }, { key: 'multi', label: 'Multi-centre' }],
+  award: [{ key: 'level', label: 'Level' }],
+  innovation: [{ key: 'patent', label: 'Patent status' }],
+  service: [{ key: 'kind', label: 'Kind' }],
   teaching: [{ key: 'mode', label: 'Mode' }],
   field_visit: [{ key: 'state', label: 'State' }],
   training: [{ key: 'type', label: 'Type' }, { key: 'level', label: 'Level' }],
@@ -216,3 +325,7 @@ const FILTERS = {
   publication: [{ key: 'kind', label: 'Kind' }, { key: 'roles', label: 'Your role' }, { key: 'journal_level', label: 'Journal level' }, { key: 'type', label: 'Type' }],
 };
 for (const [k, v] of Object.entries(FILTERS)) SECTIONS[k].filters = v;
+
+// Home-screen grouping
+const ACTIVITIES = ['teaching', 'field_visit', 'training', 'meeting', 'support', 'policy', 'peer_review', 'publication'];
+for (const [k, sec] of Object.entries(SECTIONS)) sec.group = ACTIVITIES.includes(k) ? 'Activities' : 'Projects, awards and outputs';

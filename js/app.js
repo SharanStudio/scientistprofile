@@ -86,15 +86,15 @@ function viewHome() {
   const p = state.profile;
   const needProfile = !p || !p.full_name || !p.joining_date;
   const counts = {};
-  const tiles = Object.entries(SECTIONS).map(([key, s]) => {
+  const groups = {};
+  for (const [key, sec] of Object.entries(SECTIONS)) {
     counts[key] = h('span', { class: 'n' }, ' ');
-    return h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, s.label), h('span', {}, s.blurb), counts[key]);
-  });
+    (groups[sec.group] ||= []).push(h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]));
+  }
   shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
-    h('h2', {}, 'Choose a section'),
-    h('div', { class: 'tiles' }, tiles));
+    Object.entries(groups).map(([name, tiles]) => [h('h2', {}, name), h('div', { class: 'tiles' }, tiles)]));
   sb.from('entries').select('section').then(({ data }) => {
     if (!data) return;
     const n = {};
