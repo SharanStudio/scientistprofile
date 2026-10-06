@@ -2,10 +2,11 @@ import { sb } from './supabase.js';
 import { TURNSTILE_SITE_KEY } from './config.js';
 import { h } from './dom.js';
 import { buildForm } from './forms.js';
-import { SECTIONS, PROFILE_FIELDS, fmtDate } from './sections.js';
+import { SECTIONS, PROFILE_FIELDS } from './sections.js';
+import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 
 const root = document.getElementById('app');
-const state = { session: null, profile: null, flash: null };
+const state = { session: null, profile: null, flash: null, filters: {} };
 
 /* ---------- helpers ---------- */
 const go = (hash) => { location.hash = hash; };
@@ -84,17 +85,22 @@ function viewLogin() {
 function viewHome() {
   const p = state.profile;
   const needProfile = !p || !p.full_name || !p.joining_date;
-  const tiles = Object.entries(SECTIONS).map(([key, s]) => s.enabled
-    ? h('a', { class: 'tile', href: `#/s/${key}/new` }, h('strong', {}, s.label), h('span', {}, s.blurb))
-    : h('div', { class: 'tile soon', 'aria-disabled': 'true' }, h('strong', {}, s.label), h('span', {}, 'Coming in a later stage')));
+  const counts = {};
+  const tiles = Object.entries(SECTIONS).map(([key, s]) => {
+    counts[key] = h('span', { class: 'n' }, ' ');
+    return h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, s.label), h('span', {}, s.blurb), counts[key]);
+  });
   shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
-    h('h2', {}, 'What do you want to enter today?'),
-    h('div', { class: 'tiles' }, tiles),
-    h('h2', {}, 'Review what you entered'),
-    h('div', { class: 'tiles' }, Object.entries(SECTIONS).filter(([, s]) => s.enabled).map(([key, s]) =>
-      h('a', { class: 'tile ghost', href: `#/s/${key}` }, h('strong', {}, `${s.label} list`), h('span', {}, 'View, edit or delete')))));
+    h('h2', {}, 'Choose a section'),
+    h('div', { class: 'tiles' }, tiles));
+  sb.from('entries').select('section').then(({ data }) => {
+    if (!data) return;
+    const n = {};
+    data.forEach((r) => { n[r.section] = (n[r.section] || 0) + 1; });
+    for (const k of Object.keys(counts)) counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+  });
 }
 
 /* ---------- profile ---------- */
@@ -116,15 +122,60 @@ function viewProfile() {
   shell('Profile', h('p', { class: 'lede' }, 'These details fill the header of your Word profile.'), form.el, h('div', { class: 'actions' }, btn));
 }
 
-/* ---------- entry list ---------- */
+/* ---------- section page: entries with filters ---------- */
+const PAGE = 40;
 async function viewList(key) {
   const sec = SECTIONS[key];
   if (!sec || !sec.enabled) return go('#/');
   loadingShell(sec.label);
-  const { data, error } = await sb.from('entries').select('*').eq('section', key)
-    .order('start_date', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+  const { data, error } = await sb.from('entries').select('*').eq('section', key);
   if (error) return shell(sec.label, h('div', { class: 'flash error' }, friendly(error)));
-  const rows = data.map((e) => {
+  const f = (state.filters[key] ||= { q: '', period: 'all', from: '', to: '', before: 'all', sort: 'desc', facets: {} });
+  let shown = PAGE;
+  const listBox = h('div', {});
+  const status = h('div', { class: 'status', 'aria-live': 'polite' });
+
+  const sel = (label, value, options, onchange) => {
+    const s = h('select', { 'aria-label': label }, options.map(([v, t]) => h('option', { value: v }, t)));
+    s.value = value;
+    s.addEventListener('change', () => { onchange(s.value); shown = PAGE; draw(); });
+    return h('label', { class: 'fl' }, h('span', {}, label), s);
+  };
+
+  const years = yearsIn(data);
+  const customBox = h('div', { class: 'fl-dates' });
+  const drawCustom = () => {
+    customBox.replaceChildren();
+    if (f.period !== 'custom') return;
+    const from = h('input', { type: 'date', value: f.from, 'aria-label': 'From date' });
+    const to = h('input', { type: 'date', value: f.to, 'aria-label': 'To date' });
+    from.addEventListener('change', () => { f.from = from.value; shown = PAGE; draw(); });
+    to.addEventListener('change', () => { f.to = to.value; shown = PAGE; draw(); });
+    customBox.append(h('label', { class: 'fl' }, h('span', {}, 'From'), from), h('label', { class: 'fl' }, h('span', {}, 'To'), to));
+  };
+
+  const periodSel = sel('Period', f.period, [['all', 'All time'], ['fy', 'Last financial year'], ['cy', 'Last calendar year'],
+    ...years.map((y) => [y, `Year ${y}`]), ['custom', 'Custom range…']], (v) => { f.period = v; drawCustom(); });
+  const controls = [periodSel, customBox];
+  for (const fc of sec.filters || []) {
+    const vals = facetValues(data, fc.key);
+    if (vals.length < 2 && !f.facets[fc.key]) continue;
+    controls.push(sel(fc.label, f.facets[fc.key] || '', [['', 'All'], ...vals.map((v) => [v, v])], (v) => { f.facets[fc.key] = v; }));
+  }
+  if (sec.beforeJoining) controls.push(sel('Joining', f.before, [['all', 'All'], ['before', 'Before joining'], ['after', 'After joining']], (v) => { f.before = v; }));
+  controls.push(sel('Order', f.sort, [['desc', 'Newest first'], ['asc', 'Oldest first']], (v) => { f.sort = v; }));
+
+  const search = h('input', { type: 'search', placeholder: 'Search this section…', 'aria-label': 'Search', value: f.q });
+  search.addEventListener('input', () => { f.q = search.value; shown = PAGE; draw(); });
+  const clear = h('button', { class: 'link' }, 'Clear filters');
+  clear.addEventListener('click', () => {
+    f.q = ''; f.period = 'all'; f.from = ''; f.to = ''; f.before = 'all'; f.facets = {};
+    viewList(key);
+  });
+  const panel = h('details', { class: 'filters', open: isFiltered({ ...f, q: '' }) }, h('summary', {}, 'Filters'), h('div', { class: 'fl-grid' }, controls), clear);
+  drawCustom();
+
+  function row(e) {
     const del = h('button', { class: 'link danger' }, 'Delete');
     let armed = null;
     del.addEventListener('click', async () => {
@@ -139,13 +190,27 @@ async function viewList(key) {
       viewList(key);
     });
     return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, sec.summary(e),
-        e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null),
+      h('div', { class: 'row-main' }, sec.summary(e), e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null),
       h('div', { class: 'row-actions' }, h('a', { href: `#/s/${key}/${e.id}` }, 'Edit'), del));
-  });
-  shell(`${sec.label} (${data.length})`,
+  }
+
+  function draw() {
+    const rows = applyFilters(data, f, sec.summary);
+    status.textContent = data.length === 0 ? '' : isFiltered(f)
+      ? `Showing ${rows.length} of ${data.length} entries` : `${data.length} ${data.length === 1 ? 'entry' : 'entries'}`;
+    if (!data.length) listBox.replaceChildren(h('p', { class: 'empty' }, 'No entries yet. Add your first one.'));
+    else if (!rows.length) listBox.replaceChildren(h('p', { class: 'empty' }, 'Nothing matches these filters.'));
+    else {
+      const more = rows.length > shown
+        ? h('button', { class: 'secondary', onclick: () => { shown += PAGE; draw(); } }, `Show ${Math.min(PAGE, rows.length - shown)} more`) : null;
+      listBox.replaceChildren(h('ul', { class: 'rows' }, rows.slice(0, shown).map(row)), more);
+    }
+  }
+
+  shell(sec.label,
     h('div', { class: 'toolbar' }, h('a', { class: 'btn primary', href: `#/s/${key}/new` }, 'Add entry')),
-    rows.length ? h('ul', { class: 'rows' }, rows) : h('p', { class: 'empty' }, 'No entries yet.'));
+    data.length ? [search, panel] : null, status, listBox);
+  draw();
 }
 
 /* ---------- entry form (new or edit) ---------- */
@@ -160,16 +225,20 @@ async function viewEntry(key, id) {
     entry = data;
   }
   const initial = entry ? { ...entry.data, start_date: entry.start_date, end_date: entry.end_date, before_joining: entry.before_joining } : {};
-  const fields = [...sec.fields, { key: 'before_joining', type: 'checkbox', label: 'This happened before I joined ICMR-NIE' }];
+  const fields = sec.beforeJoining
+    ? [...sec.fields, { key: 'before_joining', type: 'checkbox', label: 'This was published or done before I joined ICMR-NIE' }]
+    : sec.fields;
   const form = buildForm(fields, initial);
   const joining = state.profile && state.profile.joining_date;
 
   // Auto-tick "before joining" from the start date until the user changes the box by hand.
   let manual = !!entry;
-  form.input('before_joining').addEventListener('change', () => { manual = true; });
-  form.input('start_date').addEventListener('change', () => {
-    if (!manual && joining) form.set('before_joining', !!form.input('start_date').value && form.input('start_date').value < joining);
-  });
+  if (sec.beforeJoining) {
+    form.input('before_joining').addEventListener('change', () => { manual = true; });
+    form.input('start_date').addEventListener('change', () => {
+      if (!manual && joining) form.set('before_joining', !!form.input('start_date').value && form.input('start_date').value < joining);
+    });
+  }
 
   const dupBox = h('div', { class: 'flash warn', hidden: true });
   let existing = [];
@@ -185,13 +254,15 @@ async function viewEntry(key, id) {
       msg.textContent = '';
       if (!form.validate()) return;
       const v = form.values();
-      const { start_date, end_date, before_joining, ...data } = v;
-      const row = { section: key, start_date, end_date: end_date || null, ongoing: false, before_joining: !!before_joining, data };
+      const { start_date, end_date, before_joining, ...rest } = v;
+      const data = sec.finalise ? sec.finalise(rest) : rest;
+      const row = { section: key, start_date, end_date: end_date || null,
+        ongoing: !!sec.ongoingIfBlank && !end_date, before_joining: !!before_joining, data };
       if (!entry && sec.dupKey && !dupBox.dataset.ok) {
         const k = sec.dupKey(row);
         if (existing.some((e) => sec.dupKey(e) === k)) {
           dupBox.hidden = false;
-          dupBox.textContent = 'An entry with the same date, project and district already exists. Press the button again to save it anyway.';
+          dupBox.textContent = 'This looks like a duplicate of an entry you already saved. Press the button again to save it anyway.';
           dupBox.dataset.ok = '1';
           return;
         }
@@ -209,7 +280,7 @@ async function viewEntry(key, id) {
   };
   form.onChange(() => { delete dupBox.dataset.ok; dupBox.hidden = true; });
   shell(entry ? `Edit: ${sec.label}` : `New: ${sec.label}`,
-    joining ? null : h('div', { class: 'flash warn' }, 'Add your joining date in your ', h('a', { href: '#/profile' }, 'profile'), ' so "before joining" is ticked for you.'),
+    joining || !sec.beforeJoining ? null : h('div', { class: 'flash warn' }, 'Add your joining date in your ', h('a', { href: '#/profile' }, 'profile'), ' so "before joining" is ticked for you.'),
     form.el, dupBox, msg,
     h('div', { class: 'actions' }, mk(entry ? 'Save changes' : 'Save', false), entry ? null : mk('Save and add another', true),
       h('a', { class: 'btn', href: `#/s/${key}` }, 'Cancel')));
@@ -234,7 +305,7 @@ async function route() {
 sb.auth.onAuthStateChange((event, session) => {
   const changed = (session && session.user.id) !== (state.session && state.session.user.id);
   state.session = session;
-  if (changed) { state.profile = null; if (!session) location.hash = ''; }
+  if (changed) { state.profile = null; state.filters = {}; if (!session) location.hash = ''; }
   // Re-render only on first load or when the user changes. Token refreshes and tab refocus must not wipe a half-filled form.
   // Defer with setTimeout: calling the database inside this callback can deadlock the auth client.
   if (changed || event === 'INITIAL_SESSION') setTimeout(route, 0);
