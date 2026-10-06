@@ -4,6 +4,7 @@ import { h } from './dom.js';
 import { buildForm } from './forms.js';
 import { SECTIONS, PROFILE_FIELDS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
+import { viewSummaries, viewSummaryEditor } from './summaries.js';
 
 const root = document.getElementById('app');
 const state = { session: null, profile: null, flash: null, filters: {} };
@@ -91,6 +92,9 @@ function viewHome() {
     counts[key] = h('span', { class: 'n' }, ' ');
     (groups[sec.group] ||= []).push(h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]));
   }
+  counts.summaries = h('span', { class: 'n' }, ' ');
+  groups['Projects, awards and outputs'].push(h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
+    h('span', {}, 'Rich-text summary for each project'), counts.summaries));
   shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
@@ -99,7 +103,14 @@ function viewHome() {
     if (!data) return;
     const n = {};
     data.forEach((r) => { n[r.section] = (n[r.section] || 0) + 1; });
-    for (const k of Object.keys(counts)) counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+    for (const k of Object.keys(counts)) if (k !== 'summaries') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+    sb.from('summaries').select('slug,created_at,flag:blocks->>none').order('created_at', { ascending: false }).then(({ data: rows }) => {
+      if (!rows) return;
+      const seen = new Map();
+      for (const r of rows) if (!seen.has(r.slug)) seen.set(r.slug, r);
+      const have = [...seen.values()].filter((r) => !(r.flag === 'true' || r.flag === true || (r.blocks && r.blocks.none === true))).length;
+      counts.summaries.textContent = `${have} of ${n.project || 0} projects`;
+    });
   });
 }
 
@@ -186,6 +197,7 @@ async function viewList(key) {
       }
       clearTimeout(armed);
       const { error: er } = await sb.from('entries').delete().eq('id', e.id);
+      if (!er && key === 'project') await sb.from('summaries').delete().eq('slug', e.id);
       setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Entry deleted.');
       viewList(key);
     });
@@ -292,7 +304,10 @@ async function route() {
   try {
     if (!state.profile) await loadProfile();
     const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+    const ctx = { sb, shell, loadingShell, friendly, setFlash, go, state };
     if (parts[0] === 'profile') return viewProfile();
+    if (parts[0] === 'summaries') return await viewSummaries(ctx);
+    if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1]);
     if (parts[0] === 's' && parts[1] && parts[2]) return await viewEntry(parts[1], parts[2]);
     if (parts[0] === 's' && parts[1]) return await viewList(parts[1]);
     return viewHome();
