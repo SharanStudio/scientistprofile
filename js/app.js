@@ -5,6 +5,7 @@ import { buildForm } from './forms.js';
 import { SECTIONS, PROFILE_FIELDS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
+import { viewReports, viewReportBuilder } from './reports.js';
 
 const root = document.getElementById('app');
 const state = { session: null, profile: null, flash: null, filters: {} };
@@ -93,8 +94,11 @@ function viewHome() {
     (groups[sec.group] ||= []).push(h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]));
   }
   counts.summaries = h('span', { class: 'n' }, ' ');
+  counts.reports = h('span', { class: 'n' }, ' ');
   groups['Projects, awards and outputs'].push(h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
-    h('span', {}, 'Rich-text summary for each project'), counts.summaries));
+    h('span', {}, 'Rich-text summaries, several per project if needed'), counts.summaries));
+  groups['Projects, awards and outputs'].push(h('a', { class: 'tile', href: '#/reports' }, h('strong', {}, 'Reports'),
+    h('span', {}, 'Choose and order summaries, keep saved reports'), counts.reports));
   shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
@@ -103,13 +107,17 @@ function viewHome() {
     if (!data) return;
     const n = {};
     data.forEach((r) => { n[r.section] = (n[r.section] || 0) + 1; });
-    for (const k of Object.keys(counts)) if (k !== 'summaries') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
-    sb.from('summaries').select('slug,created_at,flag:blocks->>none').order('created_at', { ascending: false }).then(({ data: rows }) => {
+    for (const k of Object.keys(counts)) if (k !== 'summaries' && k !== 'reports') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+    sb.from('summaries').select('slug,project_id,created_at,flag:blocks->>none').order('created_at', { ascending: false }).then(({ data: rows }) => {
       if (!rows) return;
       const seen = new Map();
       for (const r of rows) if (!seen.has(r.slug)) seen.set(r.slug, r);
-      const have = [...seen.values()].filter((r) => !(r.flag === 'true' || r.flag === true || (r.blocks && r.blocks.none === true))).length;
-      counts.summaries.textContent = `${have} of ${n.project || 0} projects`;
+      const real = [...seen.values()].filter((r) => r.project_id && !(r.flag === 'true' || r.flag === true));
+      const projects = new Set(real.map((r) => r.project_id)).size;
+      counts.summaries.textContent = `${real.length} ${real.length === 1 ? 'summary' : 'summaries'} · ${projects} of ${n.project || 0} projects`;
+    });
+    sb.from('reports').select('id', { count: 'exact', head: true }).then(({ count }) => {
+      if (count != null) counts.reports.textContent = `${count} saved`;
     });
   });
 }
@@ -197,7 +205,7 @@ async function viewList(key) {
       }
       clearTimeout(armed);
       const { error: er } = await sb.from('entries').delete().eq('id', e.id);
-      if (!er && key === 'project') await sb.from('summaries').delete().eq('slug', e.id);
+      if (!er && key === 'project') await sb.from('summaries').delete().eq('project_id', e.id);
       setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Entry deleted.');
       viewList(key);
     });
@@ -307,7 +315,9 @@ async function route() {
     const ctx = { sb, shell, loadingShell, friendly, setFlash, go, state };
     if (parts[0] === 'profile') return viewProfile();
     if (parts[0] === 'summaries') return await viewSummaries(ctx);
-    if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1]);
+    if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1], parts[2]);
+    if (parts[0] === 'reports') return await viewReports(ctx);
+    if (parts[0] === 'report') return await viewReportBuilder(ctx, parts[1]);
     if (parts[0] === 's' && parts[1] && parts[2]) return await viewEntry(parts[1], parts[2]);
     if (parts[0] === 's' && parts[1]) return await viewList(parts[1]);
     return viewHome();

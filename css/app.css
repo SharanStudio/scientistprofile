@@ -104,3 +104,7 @@ input[type=search]{margin-bottom:.7rem}
 .ql-snow .ql-tooltip input[type=text]{min-height:0;width:auto}
 .ql-snow .ql-tooltip a.ql-action::after,.ql-snow .ql-tooltip a.ql-remove::before{color:var(--link)}
 .editor-box .ql-toolbar button{min-height:0;display:inline-block;padding:3px 5px}
+.sub-item{margin-top:.25rem}
+.order-n{font-weight:700;color:var(--muted)}
+button.link:disabled{opacity:.4;cursor:default;text-decoration:none}
+.row-main strong{font-weight:600}
