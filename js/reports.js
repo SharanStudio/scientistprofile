@@ -1,4 +1,6 @@
-import { h } from './dom.js';
+import { h, today } from './dom.js';
+import { buildModel, readiness, windows, fmtDate } from './profile-data.js';
+import { buildProfileDocx } from './docx-fill.js';
 import { dateOnly, stamp, latestPerSlug, isFlag, opsText, countWords, SOFT_LIMIT_WORDS } from './summaries.js';
 
 const STALE_DAYS = 180;
@@ -23,6 +25,17 @@ export const addItem = (list, item) => (list.some((x) => x.slug === item.slug) ?
 export function matches(item, q) {
   const t = q.trim().toLowerCase();
   return !t || `${item.project_name} ${item.title}`.toLowerCase().includes(t);
+}
+
+// Reads every row, 1000 at a time (the API returns at most 1000 per request)
+async function fetchAll(sb, table) {
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from(table).select('*').order('id').range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) return rows;
+  }
 }
 
 let held = null; // unsaved picker state, so you can leave the page and come back: { key, title, order }
@@ -155,12 +168,81 @@ export async function viewReportBuilder(ctx, id) {
   const addAll = h('button', { class: 'link' }, 'Add all');
   addAll.addEventListener('click', () => { for (const it of current) held.order = addItem(held.order, it); drawPicked(); drawAvail(); });
 
+
+  // ----- style, as-of date and the Build button -----
+  const styleSel = h('select', { id: 'rep_style' }, h('option', { value: 'profile' }, 'Scientist Profile'), h('option', { value: 'cv', disabled: true }, 'CV (coming later)'));
+  const asOfIn = h('input', { id: 'rep_asof', type: 'date', value: held.asOf || today() });
+  const winNote = h('div', { class: 'hint' });
+  const drawWin = () => {
+    held.asOf = asOfIn.value;
+    if (!asOfIn.value) { winNote.textContent = ''; return; }
+    const w = windows(asOfIn.value);
+    winNote.textContent = `"Last financial year" = ${fmtDate(w.fy.start)} to ${fmtDate(w.fy.end)}. "Last calendar year" = ${fmtDate(w.cy.start)} to ${fmtDate(w.cy.end)}.`;
+  };
+  asOfIn.addEventListener('input', drawWin);
+  drawWin();
+  const buildMsg = h('div', { class: 'err', role: 'alert' });
+  const progress = h('div', { class: 'hint', role: 'status' });
+  const result = h('div', {});
+  const buildBtn = h('button', { class: 'primary' }, 'Build report');
+  let savedId = isNew ? null : id;
+  let objectUrl = null;
+  buildBtn.addEventListener('click', async () => {
+    buildMsg.textContent = ''; result.replaceChildren();
+    if (!asOfIn.value) { buildMsg.textContent = 'Choose the report date.'; return; }
+    const title = titleIn.value.trim();
+    if (!title) { buildMsg.textContent = 'Give the report a title.'; titleIn.focus(); return; }
+    buildBtn.disabled = true;
+    const t0 = Date.now();
+    let step = 'Starting';
+    const tick = setInterval(() => { progress.textContent = `${step}… ${Math.round((Date.now() - t0) / 1000)} s`; }, 250);
+    const setStep = (x) => { step = x; progress.textContent = `${x}… ${Math.round((Date.now() - t0) / 1000)} s`; };
+    try {
+      setStep('Reading your data');
+      const uid = ctx.state.session.user.id;
+      const [entries, prof] = await Promise.all([fetchAll(sb, 'entries'), sb.from('profiles').select('*').eq('user_id', uid).maybeSingle()]);
+      if (prof.error) throw prof.error;
+      const model = buildModel(entries, prof.data, asOfIn.value);
+      const items = held.order.map((it) => bySlug.get(it.slug) || it);
+      setStep('Loading the template');
+      const [{ default: JSZip }, tpl] = await Promise.all([
+        import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm'),
+        fetch('templates/profile.docx', { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error('Could not load the Word template.'); return r.arrayBuffer(); }),
+      ]);
+      const blob = await buildProfileDocx({ templateBytes: tpl, model, summaries: items, deps: { JSZip, DOMParser, XMLSerializer }, onStep: setStep });
+      setStep('Saving the report record');
+      const row = { title, items };
+      const res = savedId ? await sb.from('reports').update(row).eq('id', savedId) : await sb.from('reports').insert(row).select('id').single();
+      if (res.error) throw res.error;
+      if (!savedId && res.data) savedId = res.data.id;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(blob);
+      const fname = `${title.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Scientist_Profile'}.docx`;
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      const warns = readiness(entries, prof.data);
+      result.replaceChildren(
+        h('div', { class: 'flash ok' }, `Ready in ${secs} s. ${model.stats.entries} entries and ${items.length} ${items.length === 1 ? 'summary' : 'summaries'} included.`),
+        warns.length ? h('div', { class: 'flash warn' }, warns.join(' ')) : null,
+        h('a', { class: 'btn primary', href: objectUrl, download: fname }, 'Download Word file'),
+        h('p', { class: 'hint' }, 'Open the file in Word and check it before you send it. Press F9 or update fields if Word asks.'));
+      progress.textContent = '';
+    } catch (er) {
+      buildMsg.textContent = `The build stopped at "${step}": ${friendly(er)}`;
+      progress.textContent = '';
+    } finally { clearInterval(tick); buildBtn.disabled = false; }
+  });
+
   shell(isNew ? 'Build a report' : 'Edit report',
     h('p', { class: 'lede' }, 'Choose the summaries for the report and set their order. The report places them at the end, one per page, in this order. A project can contribute more than one.'),
-    h('div', { class: 'form' }, h('div', { class: 'field' }, h('label', { for: 'rep_title' }, 'Report title'), titleIn)),
+    h('div', { class: 'form' },
+      h('div', { class: 'field' }, h('label', { for: 'rep_style' }, 'Report style'), styleSel),
+      h('div', { class: 'field' }, h('label', { for: 'rep_title' }, 'Report title'), titleIn),
+      h('div', { class: 'field' }, h('label', { for: 'rep_asof' }, 'Report date'), asOfIn, winNote)),
     pickedHead, pickedBox, h('div', { class: 'toolbar' }, clearBtn),
     h('h2', {}, 'Available summaries'), h('div', { class: 'toolbar' }, addAll), search, availBox,
     msg,
+    h('h2', {}, 'Build'), buildMsg, progress, result,
+    h('div', { class: 'actions' }, buildBtn),
     h('div', { class: 'actions' }, saveBtn, copyBtn, h('a', { class: 'btn', href: '#/reports' }, 'Cancel')),
     h('p', { class: 'hint' }, 'Saved reports stay in the database until you delete them yourself.'));
   drawPicked(); drawAvail();
