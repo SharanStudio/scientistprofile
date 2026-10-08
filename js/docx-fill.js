@@ -140,7 +140,7 @@ function paragraphFor(doc, runs, block, orderedNum, opts = {}) {
 
 // Returns { paragraphs: [Element], orderedLists: number } and asks `nextOrderedId()` for a fresh numId per ordered list.
 export function deltaToParagraphs(doc, delta, nextOrderedId) {
-  const ops = (delta && delta.ops) || [];
+  const ops = Array.isArray(delta) ? delta : ((delta && delta.ops) || []); // the form stores a bare array of ops
   const out = [];
   let runs = [];
   let ordered = null; // numId of the ordered list currently open
