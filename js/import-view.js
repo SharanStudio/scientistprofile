@@ -20,6 +20,19 @@ async function loadExisting(sb) {
   return out;
 }
 
+// Every record from one upload carries the same import ID in data._import, so one click can undo the batch.
+const newImportId = () => 'imp_' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+
+// One insert call is one database transaction: either every record is saved or none is.
+async function saveAll(sb, res) {
+  const id = newImportId();
+  const rows = [];
+  for (const s of res.sheets) for (const r of s.rows) if (r.status === 'new') rows.push({ ...r.row, data: { ...r.row.data, _import: id } });
+  const { error } = await sb.from('entries').insert(rows);
+  if (error) throw error;
+  return { id, count: rows.length };
+}
+
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 function totalsTable(res) {
@@ -110,8 +123,30 @@ export async function viewImport(ctx) {
       : t.new === 0 ? h('div', { class: 'flash warn' }, 'Every row already exists, so there is nothing new to add.')
       : h('div', { class: 'flash ok' }, `Ready: ${plural(t.new, 'new record')} can be added.`);
     return [h('p', { class: 'hint' }, `Checked ${name}. The file stays on your device.`), verdict, problems, totalsTable(res), errorList(res), noteList(res), previewNew(res), skipped(res),
-      h('div', { class: 'actions' }, h('button', { class: 'primary', disabled: true, title: 'Saving arrives in the next update' }, 'Import'),
-        h('span', { class: 'hint' }, 'Saving is not switched on yet. This page only checks your file.'))];
+      importBar(res)];
+  }
+
+  function importBar(res) {
+    const t = res.totals;
+    const can = t.error === 0 && t.new > 0;
+    const btn = h('button', { class: 'primary', disabled: !can }, can ? `Import ${plural(t.new, 'record')}` : 'Import');
+    const msg = h('div', { role: 'status' });
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = 'Saving…'; msg.replaceChildren();
+      try {
+        const done = await saveAll(sb, res);
+        out.replaceChildren(h('div', { class: 'flash ok', role: 'status' }, `Imported ${plural(done.count, 'record')}.`),
+          h('p', { class: 'hint' }, `Import ID: ${done.id}. All ${done.count} records were saved together.`),
+          h('div', { class: 'actions' }, h('a', { class: 'btn', href: '#/' }, 'Go to Home')));
+        input.value = '';
+      } catch (e) {
+        msg.replaceChildren(h('div', { class: 'flash error' }, `Nothing was saved. ${friendly(e)}`));
+        btn.disabled = false; btn.textContent = `Import ${plural(t.new, 'record')}`;
+      }
+    });
+    const note = can ? (t.exists + t['dup-in-file'] ? `${plural(t.exists + t['dup-in-file'], 'row')} will be skipped.` : '')
+      : t.error ? 'Fix the errors in your file first.' : 'Nothing new to import.';
+    return h('div', {}, h('div', { class: 'actions' }, btn, note ? h('span', { class: 'hint' }, note) : null), msg);
   }
 
   shell('Upload past records',
