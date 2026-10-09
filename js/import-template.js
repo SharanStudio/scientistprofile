@@ -1,5 +1,5 @@
 import { STATES } from './states.js';
-import { IMPORT_SECTIONS, LAYOUT, TEMPLATE_VERSION, importFields, schemaHash, whenHint } from './import-schema.js';
+import { IMPORT_SECTIONS, LAYOUT, TEMPLATE_VERSION, columnTitles, importFields, schemaHash, whenHint } from './import-schema.js';
 import { loadExcelJS } from './exceljs-loader.js';
 
 // One example row per sheet. The reader ignores row 3, and a test checks that every example passes the same rules as real rows.
@@ -25,22 +25,6 @@ const NOTE_LIST_MAX = 12;
 
 const colLetter = (n) => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
 const isoToDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
-
-// 'Programme support' from 'Fill only when "What was it?" = Programme support and ...'
-const firstCondition = (hint) => { const m = hint.match(/^Fill only when "[^"]+" (?:=|includes) (.+?)(?: and "|\.$)/); return m ? m[1] : ''; };
-
-// Visible column titles. A title that repeats on a sheet gets the row type added, so every column reads differently.
-function headerTitles(fields) {
-  const counts = {};
-  fields.forEach((f) => { counts[f.label] = (counts[f.label] || 0) + 1; });
-  return fields.map((f) => {
-    const hint = whenHint(fields, f);
-    const base = counts[f.label] > 1 && firstCondition(hint) ? `${f.label} (${firstCondition(hint)})` : f.label;
-    const conditional = !!hint || !!f.requiredIf;     // † only when the column depends on another answer
-    const mark = (f.required || f.requiredIf) ? (conditional ? ' †' : ' *') : '';
-    return base + mark;
-  });
-}
 
 function noteFor(f, hint) {
   const lines = [];
@@ -105,7 +89,7 @@ export function buildTemplate(ExcelJS) {
 
   for (const [key, , ws] of sheets) {
     const fields = importFields(key);
-    const titles = headerTitles(fields);
+    const titles = columnTitles(fields).map((c) => c.title);
     const example = EXAMPLES[key];
 
     ws.columns = fields.map((f) => ({

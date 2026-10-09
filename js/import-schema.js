@@ -53,6 +53,23 @@ export function whenHint(fields, f) {
   return parts.length ? `Fill only when ${parts.join(' and ')}.` : '';
 }
 
+// 'Programme support' from 'Fill only when "What was it?" = Programme support and ...'
+const firstCondition = (hint) => { const m = hint.match(/^Fill only when "[^"]+" (?:=|includes) (.+?)(?: and "|\.$)/); return m ? m[1] : ''; };
+
+// Column titles for a sheet. A label that repeats on one sheet gets the row type added, so every column reads differently.
+// title is what the header shows (with * or †); label is the same without the mark, for use in messages.
+export function columnTitles(fields) {
+  const counts = {};
+  fields.forEach((f) => { counts[f.label] = (counts[f.label] || 0) + 1; });
+  return fields.map((f) => {
+    const hint = whenHint(fields, f);
+    const label = counts[f.label] > 1 && firstCondition(hint) ? `${f.label} (${firstCondition(hint)})` : f.label;
+    const conditional = !!hint || !!f.requiredIf;     // † only when the column depends on another answer
+    const mark = (f.required || f.requiredIf) ? (conditional ? ' †' : ' *') : '';
+    return { key: f.key, label, title: label + mark };
+  });
+}
+
 // A short fingerprint of every sheet, column, type, requirement and dropdown value.
 // It goes into the template, and the importer compares it, so an out-of-date template is caught.
 export function schemaHash() {

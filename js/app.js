@@ -7,6 +7,7 @@ import { SECTIONS, PROFILE_FIELDS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
 import { viewReports, viewReportBuilder } from './reports.js';
+import { viewImport } from './import-view.js';
 
 const root = document.getElementById('app');
 const state = { session: null, profile: null, flash: null, filters: {} };
@@ -54,6 +55,7 @@ function render(title, withFlash, content) {
   const nav = state.session ? h('nav', {},
     h('a', { href: '#/' }, 'Home'),
     h('a', { href: '#/profile' }, 'Profile'),
+    h('a', { href: '#/import' }, 'Upload'),
     h('button', { class: 'link', title: 'Download the Excel workbook for uploading past records', onclick: downloadTemplate }, 'Template'),
     h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); } }, 'Sign out')) : null;
   root.replaceChildren(
@@ -327,6 +329,7 @@ async function route() {
     if (parts[0] === 'profile') return viewProfile();
     if (parts[0] === 'summaries') return await viewSummaries(ctx);
     if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1], parts[2]);
+    if (parts[0] === 'import') return viewImport(ctx);
     if (parts[0] === 'reports') return await viewReports(ctx);
     if (parts[0] === 'report') return await viewReportBuilder(ctx, parts[1]);
     if (parts[0] === 's' && parts[1] && parts[2]) return await viewEntry(parts[1], parts[2]);

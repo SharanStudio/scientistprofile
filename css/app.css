@@ -17,7 +17,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--font);-w
 .boot{padding:2rem;color:var(--muted)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.75rem 16px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--card) 80%,transparent);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);position:sticky;top:0;z-index:5}
 .brand{font:700 1.05rem var(--font);color:var(--ink);text-decoration:none;letter-spacing:-.01em}
-nav{display:flex;gap:1rem;align-items:center}
+nav{display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;justify-content:flex-end}
 nav a,.link{color:var(--link);background:none;border:0;padding:0;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 main{max-width:760px;margin:0 auto;padding:20px 16px 64px}
 h1{font:700 1.9rem/1.15 var(--font);letter-spacing:-.02em;margin:.4rem 0 1rem}
@@ -108,3 +108,16 @@ input[type=search]{margin-bottom:.7rem}
 .order-n{font-weight:700;color:var(--muted)}
 button.link:disabled{opacity:.4;cursor:default;text-decoration:none}
 .row-main strong{font-weight:600}
+
+/* Upload page */
+.tablewrap{overflow-x:auto;margin:1rem 0}
+table.results{border-collapse:collapse;width:100%;font-size:.95rem}
+table.results th,table.results td{padding:.45rem .4rem;border-bottom:1px solid var(--line);text-align:right}
+table.results th:first-child{text-align:left;font-weight:600}
+table.results thead th{color:var(--muted);font-weight:600}
+table.results tr.total th,table.results tr.total td{font-weight:700}
+table.results td.bad{color:var(--bad);font-weight:700}
+ul.errlist{margin:.5rem 0;padding-left:1.1rem}
+ul.errlist li{margin:.3rem 0;overflow-wrap:anywhere}
+details.tile summary,section.tile details summary{cursor:pointer}
+@media (max-width:480px){table.results{font-size:.82rem}table.results th,table.results td{padding:.4rem .2rem}}
