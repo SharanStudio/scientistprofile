@@ -23,6 +23,19 @@ function friendly(error) {
   return m;
 }
 function setFlash(kind, text) { state.flash = { kind, text }; }
+
+// The spreadsheet code loads only when the button is pressed, so it never slows the first page load.
+async function downloadTemplate(ev) {
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    const { downloadTemplate: build } = await import('./import-template.js');
+    await build();
+  } catch (e) {
+    setFlash('error', `Could not build the template. ${friendly(e)}`);
+    route();
+  } finally { btn.disabled = false; }
+}
 function takeFlash() { const f = state.flash; state.flash = null; return f ? h('div', { class: `flash ${f.kind}`, role: 'status' }, f.text) : null; }
 function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = on ? 'Working…' : label; }
 
@@ -41,6 +54,7 @@ function render(title, withFlash, content) {
   const nav = state.session ? h('nav', {},
     h('a', { href: '#/' }, 'Home'),
     h('a', { href: '#/profile' }, 'Profile'),
+    h('button', { class: 'link', title: 'Download the Excel workbook for uploading past records', onclick: downloadTemplate }, 'Template'),
     h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); } }, 'Sign out')) : null;
   root.replaceChildren(
     h('header', { class: 'top' }, h('a', { class: 'brand', href: '#/' }, 'Scientist Profile'), nav),
