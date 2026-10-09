@@ -2,6 +2,7 @@ import { sb } from './supabase.js';
 import { TURNSTILE_SITE_KEY } from './config.js';
 import { h } from './dom.js';
 import { buildForm } from './forms.js';
+import { buildRow } from './rules.js';
 import { SECTIONS, PROFILE_FIELDS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
@@ -273,11 +274,7 @@ async function viewEntry(key, id) {
     b.addEventListener('click', async () => {
       msg.textContent = '';
       if (!form.validate()) return;
-      const v = form.values();
-      const { start_date, end_date, before_joining, ...rest } = v;
-      const data = sec.finalise ? sec.finalise(rest) : rest;
-      const row = { section: key, start_date, end_date: end_date || null,
-        ongoing: sec.ongoingFrom ? !!sec.ongoingFrom(data) : (!!sec.ongoingIfBlank && !end_date), before_joining: !!before_joining, data };
+      const row = buildRow(key, sec, form.values());
       if (!entry && sec.dupKey && !dupBox.dataset.ok) {
         const k = sec.dupKey(row);
         if (existing.some((e) => sec.dupKey(e) === k)) {

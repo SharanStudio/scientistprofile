@@ -1,17 +1,5 @@
 import { h, today } from './dom.js';
-
-const ORCID_RE = /^(?:https?:\/\/orcid\.org\/)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX])$/;
-const MIN_DATE = '1950-01-01';
-const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
-
-// ORCID check digit (ISO 7064 mod 11-2)
-function orcidOk(id) {
-  const digits = id.replace(/-/g, '');
-  let total = 0;
-  for (let i = 0; i < 15; i++) total = (total + Number(digits[i])) * 2;
-  const r = (12 - (total % 11)) % 11;
-  return digits[15] === (r === 10 ? 'X' : String(r));
-}
+import { MIN_DATE, wordCount, isVisible, cleanValues, validateValues } from './rules.js';
 
 // Field options: key, type (text, textarea, select, multicheck, checkbox, date, int, num, url, orcid), label, required,
 // help, max (characters), words (word limit), options, showIf(values), pattern + patternMsg, norm(value), noFuture.
@@ -88,7 +76,6 @@ export function buildForm(fields, initial = {}) {
   const el = h('div', { class: 'form' });
   for (const f of fields) { rows[f.key] = make(f); el.append(rows[f.key]); }
 
-  const isVisible = (f, vals) => !f.showIf || !!f.showIf(vals);
 
   function raw() {
     const out = {};
@@ -104,16 +91,7 @@ export function buildForm(fields, initial = {}) {
   }
 
   // values(): what gets saved. Hidden fields return null/false so stale answers never reach the database.
-  function values() {
-    const r = raw();
-    const out = {};
-    for (const f of fields) {
-      if (!isVisible(f, r)) { out[f.key] = f.type === 'checkbox' ? false : null; continue; }
-      const val = r[f.key];
-      out[f.key] = val !== null && f.norm ? f.norm(val) : val;
-    }
-    return out;
-  }
+  function values() { return cleanValues(fields, raw()); }
 
   function refresh() {
     const r = raw();
@@ -122,42 +100,13 @@ export function buildForm(fields, initial = {}) {
   function fire() { refresh(); listeners.forEach((fn) => fn(values())); }
 
   function validate() {
-    const vals = raw();
-    let ok = true;
+    const errors = validateValues(fields, raw());
     for (const f of fields) {
-      let msg = '';
-      const val = vals[f.key];
-      const empty = val === null || val === '' || val === undefined || (f.type === 'checkbox' && false);
-      if (isVisible(f, vals)) {
-        if ((f.required || (f.requiredIf && f.requiredIf(vals))) && empty) msg = f.type === 'multicheck' || f.type === 'select' ? 'Choose an option.' : 'This field is required.';
-        else if (!empty) {
-          if (f.type === 'date') {
-            if (val < MIN_DATE) msg = 'Check the year. This date is too early.';
-            else if (f.noFuture && val > today()) msg = 'This date is in the future.';
-          }
-          if (f.type === 'url' && !/^https?:\/\/\S+\.\S+/i.test(val)) msg = 'Enter a full link starting with https://';
-          if (f.type === 'orcid') {
-            const m = ORCID_RE.exec(val);
-            if (!m) msg = 'Use the format 0000-0002-1825-0097.';
-            else if (!orcidOk(m[1])) msg = 'This ORCID fails its check digit. Re-check the digits.';
-          }
-          if (f.type === 'int' && (!Number.isInteger(val) || val < (f.min ?? 0))) msg = f.min > 0 ? `Enter a whole number, ${f.min} or more.` : 'Enter a whole number, zero or more.';
-          if (f.type === 'num' && (!Number.isFinite(val) || val < 0 || val > (f.maxNum ?? 1000))) msg = 'Enter a number such as 4.2.';
-          if (f.pattern && typeof val === 'string' && !f.pattern.test(val)) msg = f.patternMsg || 'Check the format.';
-          if (f.words && typeof val === 'string' && wordCount(val) > f.words) msg = `Keep this to ${f.words} words or fewer.`;
-          if (f.check && !msg) msg = f.check(val, vals) || '';
-        }
-      }
+      const msg = errors[f.key] || '';
       errs[f.key].textContent = msg;
       inputs[f.key].setAttribute('aria-invalid', msg ? 'true' : 'false');
-      if (msg) ok = false;
     }
-    const s = inputs.start_date, e = inputs.end_date;
-    if (s && e && !rows.end_date.hidden && s.value && e.value && e.value < s.value) {
-      errs.end_date.textContent = 'End date cannot be before the start date.';
-      e.setAttribute('aria-invalid', 'true');
-      ok = false;
-    }
+    const ok = Object.keys(errors).length === 0;
     if (!ok) {
       const first = el.querySelector('[aria-invalid="true"]');
       if (first) { first.focus(); first.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
