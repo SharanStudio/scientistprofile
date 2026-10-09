@@ -33,6 +33,25 @@ async function saveAll(sb, res) {
   return { id, count: rows.length };
 }
 
+// The newest import still in the database, with how many records it holds.
+async function findLastImport(sb) {
+  const { data, error } = await sb.from('entries').select('created_at,data')
+    .not('data->>_import', 'is', null).order('created_at', { ascending: false }).limit(1);
+  if (error) throw error;
+  if (!data.length) return null;
+  const id = data[0].data._import;
+  const { count, error: e2 } = await sb.from('entries').select('id', { count: 'exact', head: true }).eq('data->>_import', id);
+  if (e2) throw e2;
+  return { id, at: data[0].created_at, count };
+}
+
+// Removes every record that carries this import ID. Records edited by hand after the import lose the ID, so they stay.
+async function undoImport(sb, id) {
+  const { data, error } = await sb.from('entries').delete().eq('data->>_import', id).select('id');
+  if (error) throw error;
+  return data.length;
+}
+
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 function totalsTable(res) {
@@ -139,6 +158,7 @@ export async function viewImport(ctx) {
           h('p', { class: 'hint' }, `Import ID: ${done.id}. All ${done.count} records were saved together.`),
           h('div', { class: 'actions' }, h('a', { class: 'btn', href: '#/' }, 'Go to Home')));
         input.value = '';
+        refreshLast();
       } catch (e) {
         msg.replaceChildren(h('div', { class: 'flash error' }, `Nothing was saved. ${friendly(e)}`));
         btn.disabled = false; btn.textContent = `Import ${plural(t.new, 'record')}`;
@@ -149,7 +169,41 @@ export async function viewImport(ctx) {
     return h('div', {}, h('div', { class: 'actions' }, btn, note ? h('span', { class: 'hint' }, note) : null), msg);
   }
 
+  const lastBox = h('div', {});
+  async function refreshLast() {
+    try {
+      const last = await findLastImport(sb);
+      if (!last) { lastBox.replaceChildren(); return; }
+      const when = new Date(last.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const msg = h('div', { role: 'status' });
+      const undo = h('button', { class: 'secondary' }, 'Undo this import');
+      const sure = h('button', { class: 'primary', hidden: true }, `Yes, delete ${plural(last.count, 'record')}`);
+      const cancel = h('button', { class: 'secondary', hidden: true }, 'Keep them');
+      const ask = (on) => { undo.hidden = on; sure.hidden = !on; cancel.hidden = !on; };
+      undo.addEventListener('click', () => ask(true));
+      cancel.addEventListener('click', () => ask(false));
+      sure.addEventListener('click', async () => {
+        sure.disabled = true; sure.textContent = 'Deleting…';
+        try {
+          const n = await undoImport(sb, last.id);
+          out.replaceChildren();
+          await refreshLast();
+          lastBox.prepend(h('div', { class: 'flash ok', role: 'status' }, `Undone: ${plural(n, 'record')} deleted.`));
+        } catch (e) {
+          sure.disabled = false; sure.textContent = `Yes, delete ${plural(last.count, 'record')}`;
+          msg.replaceChildren(h('div', { class: 'flash error' }, `Nothing was deleted. ${friendly(e)}`));
+        }
+      });
+      lastBox.replaceChildren(h('section', { class: 'tile' }, h('h2', {}, 'Your last import'),
+        h('p', {}, `${when} · ${plural(last.count, 'record')} still in your profile.`),
+        h('p', { class: 'hint' }, 'Undo deletes these records. A record you edited by hand after the import is not deleted.'),
+        h('div', { class: 'actions' }, undo, sure, cancel), msg));
+    } catch (e) { lastBox.replaceChildren(h('div', { class: 'flash error' }, friendly(e))); }
+  }
+  refreshLast();
+
   shell('Upload past records',
     h('p', {}, 'Fill in the Excel template, then choose it here. The page checks every row and shows what would be added. The file is read in your browser and is not stored.'),
+    lastBox,
     h('div', { class: 'field' }, h('label', { for: 'xl' }, 'Excel file (.xlsx, up to 5 MB)'), input), out);
 }

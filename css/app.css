@@ -121,3 +121,4 @@ ul.errlist{margin:.5rem 0;padding-left:1.1rem}
 ul.errlist li{margin:.3rem 0;overflow-wrap:anywhere}
 details.tile summary,section.tile details summary{cursor:pointer}
 @media (max-width:480px){table.results{font-size:.82rem}table.results th,table.results td{padding:.4rem .2rem}}
+section.tile+.field,.flash+section.tile{margin-top:1rem}section.tile{margin-bottom:1rem}
