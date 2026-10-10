@@ -3,6 +3,7 @@ import { TURNSTILE_SITE_KEY } from './config.js';
 import { h } from './dom.js';
 import { buildForm } from './forms.js';
 import { buildRow } from './rules.js';
+import { loadLookups, resolveOptions } from './lookups.js';
 import { SECTIONS, PROFILE_FIELDS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
@@ -227,7 +228,8 @@ async function viewList(key) {
       viewList(key);
     });
     return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, sec.summary(e), e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null),
+      h('div', { class: 'row-main' }, sec.summary(e), e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null,
+        e.is_public ? h('span', { class: 'tag ok' }, e.is_featured ? 'on website, featured' : 'on website') : null),
       h('div', { class: 'row-actions' }, h('a', { href: `#/s/${key}/${e.id}` }, 'Edit'), del));
   }
 
@@ -261,10 +263,23 @@ async function viewEntry(key, id) {
     if (error || !data) { setFlash('error', error ? friendly(error) : 'Entry not found.'); return go(`#/s/${key}`); }
     entry = data;
   }
-  const initial = entry ? { ...entry.data, start_date: entry.start_date, end_date: entry.end_date, before_joining: entry.before_joining } : {};
-  const fields = sec.beforeJoining
-    ? [...sec.fields, { key: 'before_joining', type: 'checkbox', label: 'This was published or done before I joined ICMR-NIE' }]
-    : sec.fields;
+  const initial = entry ? {
+    ...entry.data, start_date: entry.start_date, end_date: entry.end_date, before_joining: entry.before_joining,
+    is_public: entry.is_public, is_featured: entry.is_featured,
+  } : {};
+  let fields = [
+    ...sec.fields,
+    ...(sec.beforeJoining ? [{ key: 'before_joining', type: 'checkbox', label: 'This was published or done before I joined ICMR-NIE' }] : []),
+    ...(sec.siteFields || []),
+  ];
+  // Team, research-area and programme lists come from the database, so a new team shows up without a code change.
+  let lookupFailed = false;
+  if (fields.some((f) => f.optionsFrom)) {
+    if (!entry) loadingShell(sec.label);
+    const lookups = await loadLookups();
+    lookupFailed = lookups.failed;
+    fields = resolveOptions(fields, lookups);
+  }
   const form = buildForm(fields, initial);
   const joining = state.profile && state.profile.joining_date;
 
@@ -314,6 +329,7 @@ async function viewEntry(key, id) {
   form.onChange(() => { delete dupBox.dataset.ok; dupBox.hidden = true; });
   shell(entry ? `Edit: ${sec.label}` : `New: ${sec.label}`,
     joining || !sec.beforeJoining ? null : h('div', { class: 'flash warn' }, 'Add your joining date in your ', h('a', { href: '#/profile' }, 'profile'), ' so "before joining" is ticked for you.'),
+    lookupFailed ? h('div', { class: 'flash warn' }, 'Could not load the team and research-area lists. Reload the page before saving, or the team may be left blank.') : null,
     form.el, dupBox, msg,
     h('div', { class: 'actions' }, mk(entry ? 'Save changes' : 'Save', false), entry ? null : mk('Save and add another', true),
       h('a', { class: 'btn', href: `#/s/${key}` }, 'Cancel')));
