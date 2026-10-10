@@ -17,3 +17,7 @@ Entries can feed the public website. Each entry form (publication, project, awar
 - Website fields live in a section's `siteFields`, not in `fields`, so the Word export and the Excel upload template are unchanged.
 - Mentees hold the person's email privately. A mentee's name shows on the website only when "agreed to be named" is ticked, but every mentee counts in "officers mentored".
 - Only awards of kind "Award" go into the Word profile. Grants, invited talks and roles are for the website.
+
+## Website page (site owner only)
+
+The owner sees a Website page and the website boxes on entry forms. Everyone else sees neither. Ownership comes from `public.is_site_owner()`. Run `supabase/migrations/20261010_site_owner_website_page.sql` once before using the page.

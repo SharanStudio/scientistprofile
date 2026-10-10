@@ -9,9 +9,10 @@ import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
 import { viewReports, viewReportBuilder } from './reports.js';
 import { viewImport } from './import-view.js';
+import { viewWebsite } from './website.js';
 
 const root = document.getElementById('app');
-const state = { session: null, profile: null, flash: null, filters: {} };
+const state = { session: null, profile: null, isOwner: false, flash: null, filters: {} };
 
 /* ---------- helpers ---------- */
 const go = (hash) => { location.hash = hash; };
@@ -46,6 +47,9 @@ async function loadProfile() {
   const { data, error } = await sb.from('profiles').select('*').eq('user_id', uid).maybeSingle();
   if (error) throw error;
   state.profile = data;
+  // Only the site owner sees the website fields. Everyone else gets the plain forms.
+  const own = await sb.rpc('is_site_owner');
+  state.isOwner = !own.error && own.data === true;
   return data;
 }
 
@@ -56,6 +60,7 @@ function render(title, withFlash, content) {
   const nav = state.session ? h('nav', {},
     h('a', { href: '#/' }, 'Home'),
     h('a', { href: '#/profile' }, 'Profile'),
+    state.isOwner ? h('a', { href: '#/website' }, 'Website') : null,
     h('a', { href: '#/import' }, 'Upload'),
     h('button', { class: 'link', title: 'Download the Excel workbook for uploading past records', onclick: downloadTemplate }, 'Template'),
     h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); } }, 'Sign out')) : null;
@@ -229,7 +234,7 @@ async function viewList(key) {
     });
     return h('li', { class: 'row' },
       h('div', { class: 'row-main' }, sec.summary(e), e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null,
-        e.is_public ? h('span', { class: 'tag ok' }, e.is_featured ? 'on website, featured' : 'on website') : null),
+        state.isOwner && e.is_public ? h('span', { class: 'tag ok' }, e.is_featured ? 'on website, featured' : 'on website') : null),
       h('div', { class: 'row-actions' }, h('a', { href: `#/s/${key}/${e.id}` }, 'Edit'), del));
   }
 
@@ -270,7 +275,7 @@ async function viewEntry(key, id) {
   let fields = [
     ...sec.fields,
     ...(sec.beforeJoining ? [{ key: 'before_joining', type: 'checkbox', label: 'This was published or done before I joined ICMR-NIE' }] : []),
-    ...(sec.siteFields || []),
+    ...(state.isOwner ? sec.siteFields || [] : []),
   ];
   // Team, research-area and programme lists come from the database, so a new team shows up without a code change.
   let lookupFailed = false;
@@ -343,6 +348,7 @@ async function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     const ctx = { sb, shell, loadingShell, friendly, setFlash, go, state };
     if (parts[0] === 'profile') return viewProfile();
+    if (parts[0] === 'website') return await viewWebsite(ctx);
     if (parts[0] === 'summaries') return await viewSummaries(ctx);
     if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1], parts[2]);
     if (parts[0] === 'import') return viewImport(ctx);
@@ -360,7 +366,7 @@ async function route() {
 sb.auth.onAuthStateChange((event, session) => {
   const changed = (session && session.user.id) !== (state.session && state.session.user.id);
   state.session = session;
-  if (changed) { state.profile = null; state.filters = {}; if (!session) location.hash = ''; }
+  if (changed) { state.profile = null; state.isOwner = false; state.filters = {}; if (!session) location.hash = ''; }
   // Re-render only on first load or when the user changes. Token refreshes and tab refocus must not wipe a half-filled form.
   // Defer with setTimeout: calling the database inside this callback can deadlock the auth client.
   if (changed || event === 'INITIAL_SESSION') setTimeout(route, 0);
