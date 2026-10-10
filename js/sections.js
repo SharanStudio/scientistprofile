@@ -1,4 +1,4 @@
-import { STATES } from './states.js';
+import { STATES, STATES_WITH_NATIONAL } from './states.js';
 import { today } from './dom.js';
 
 // Each section: label, fields, and a one-line summary used in lists and in the Word export.
@@ -7,6 +7,29 @@ export const fmtDate = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
 
 export const rangeText = (e) => (e.end_date && e.end_date !== e.start_date
   ? `${fmtDate(e.start_date)}–${fmtDate(e.end_date)}` : fmtDate(e.start_date));
+
+// ---- Public website fields ----
+// siteFields sit beside a section's normal fields on the entry form but stay out of `fields`, so they never reach the
+// Word export or the Excel upload. is_public and is_featured are table columns; the others are saved in data.
+// Nothing is public until the box is ticked. The website reads only the views in the `site` schema.
+export const STATE_PROGRAMME = 'FETP Intermediate (State-specific)';
+const MENTEE_PROGRAMMES = ['India EIS', 'FETP NCD Advanced', 'FETP NCD Intermediate', STATE_PROGRAMME];
+const RESEARCH_AREA_FALLBACK = [
+  { value: 'communicable-diseases', label: 'Communicable Diseases' },
+  { value: 'noncommunicable-diseases', label: 'Noncommunicable Diseases' },
+  { value: 'reproductive-child-health', label: 'Reproductive and Child Health' },
+  { value: 'digital-health', label: 'Digital Health' },
+  { value: 'field-epidemiology', label: 'Field Epidemiology' },
+];
+const SITE_PUBLIC = { key: 'is_public', type: 'checkbox', label: 'Show on my public website',
+  help: 'Off by default. Nothing appears on the website until you tick this.' };
+const SITE_FEATURED = { key: 'is_featured', type: 'checkbox', label: 'Feature on the home page', showIf: (v) => !!v.is_public };
+const SITE_AREAS = { key: 'research_areas', type: 'multicheck', label: 'Research areas', optionsFrom: 'research_areas',
+  options: RESEARCH_AREA_FALLBACK, help: 'Tick all that apply. The website uses these to group the work.' };
+const SITE_TEAM = { key: 'team_id', type: 'select', label: 'Team', optionsFrom: 'teams',
+  help: 'The one team that owns this work. Teams are managed in Supabase.' };
+const SITE_STATES = { key: 'states', type: 'multicheck', label: 'States covered', options: STATES_WITH_NATIONAL,
+  help: 'Tick every state. National (Pan-India) covers the whole country and does not count as a state in the website numbers.' };
 
 export const SECTIONS = {
   teaching: {
@@ -19,8 +42,33 @@ export const SECTIONS = {
       { key: 'course', type: 'text', label: 'Course / cohort', required: true, max: 200 },
       { key: 'mode', type: 'select', label: 'Mode', required: true, options: ['In-person', 'Online', 'Hands-on'] },
     ],
+    siteFields: [SITE_PUBLIC],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.topic} – ${e.data.course} (${e.data.mode})`,
     dupKey: (e) => [e.start_date, (e.data.topic || '').toLowerCase()].join('|'),
+  },
+  mentee: {
+    label: 'Mentees',
+    blurb: 'Officers and scholars you mentor',
+    enabled: true,
+    fields: [
+      { key: 'name', type: 'text', label: 'Name', required: true, max: 120 },
+      { key: 'designation', type: 'text', label: 'Current designation', required: true, max: 150 },
+      { key: 'organisation', type: 'text', label: 'Current organisation', required: true, max: 200 },
+      { key: 'program', type: 'select', label: 'Programme', required: true, optionsFrom: 'mentee_programs', options: MENTEE_PROGRAMMES },
+      { key: 'state', type: 'select', label: 'State', options: STATES_WITH_NATIONAL,
+        requiredIf: (v) => v.program === STATE_PROGRAMME,
+        help: 'Required for the state-specific FETP. Choose National (Pan-India) for national-level work.' },
+      { key: 'cohort', type: 'text', label: 'Cohort (optional)', max: 60 },
+      { key: 'linkedin', type: 'url', label: 'LinkedIn page (optional)' },
+      { key: 'email', type: 'text', label: 'Email (optional)', max: 150,
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, patternMsg: 'Enter a valid email address.',
+        help: 'Private. It never appears on the website.' },
+      { key: 'public_consent', type: 'checkbox', label: 'This mentee has agreed to be named on my public website',
+        help: 'Without consent the mentee still counts in "officers mentored", but the name stays off the site.' },
+    ],
+    siteFields: [SITE_PUBLIC],
+    summary: (e) => `${e.data.name}, ${e.data.designation}, ${e.data.organisation} (${e.data.program}${e.data.state ? `, ${e.data.state}` : ''})`,
+    dupKey: (e) => [(e.data.name || '').toLowerCase(), (e.data.organisation || '').toLowerCase()].join('|'),
   },
   field_visit: {
     label: 'Field visit',
@@ -181,6 +229,7 @@ export const SECTIONS = {
       { key: 'summary', type: 'textarea', label: 'Summary', required: true, words: 50, rows: 4,
         help: 'Paste your own summary, 50 words or fewer.', showIf: (v) => v.kind === 'Research publication' },
     ],
+    siteFields: [SITE_AREAS, SITE_TEAM, SITE_PUBLIC, SITE_FEATURED],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.citation}`,
     dupKey: (e) => (e.data.doi || (e.data.citation || '').toLowerCase().slice(0, 80)),
   },
@@ -209,6 +258,7 @@ export const SECTIONS = {
         help: 'Completed: the actual end date (required). Ongoing: the expected end date, if known.',
         check: (val, v) => (v.status === 'Completed' && val > today() ? 'A completed project cannot end in the future.' : '') },
     ],
+    siteFields: [SITE_AREAS, SITE_STATES, SITE_TEAM, SITE_PUBLIC, SITE_FEATURED],
     finalise: (d) => ({ ...d, area_name: d.area === 'Others' ? d.area_other : d.area }),
     summary: (e) => {
       const d = e.data;
@@ -236,10 +286,22 @@ export const SECTIONS = {
     blurb: 'Awards received since joining',
     enabled: true,
     fields: [
+      { key: 'category', type: 'select', label: 'Kind of recognition', required: true,
+        options: ['Award', 'Fellowship or grant', 'Invited talk or keynote', 'Role or appointment'],
+        help: 'Only "Award" goes into the Word profile. All kinds can appear on the website.' },
       { key: 'name', type: 'text', label: 'Name of the award', required: true, max: 300 },
+      { key: 'awarding_body', type: 'text', label: 'Awarding body', required: true, max: 250,
+        help: 'For example: CDC, ICMR-NIE.' },
       { key: 'level', type: 'select', label: 'Level', required: true, options: ['Institute', 'National', 'International'] },
       { key: 'start_date', col: true, type: 'date', label: 'Date received', required: true, noFuture: true },
+      { key: 'description', type: 'textarea', label: 'Short description (optional)', rows: 3, max: 300 },
+      { key: 'link', type: 'url', label: 'Link (optional)', help: 'A page that announces or confirms it.' },
+      { key: 'certificate_path', type: 'text', label: 'Certificate file (optional)', max: 200,
+        help: 'The file path inside the website assets folder, for example assets/certificates/cdc-2025.pdf',
+        pattern: /^(?![/.])(?!.*\.\.)[\w\-./]+\.(?:pdf|png|jpe?g|webp)$/i,
+        patternMsg: 'Use a relative path ending in .pdf, .png, .jpg or .webp, for example assets/certificates/cdc-2025.pdf' },
     ],
+    siteFields: [SITE_PUBLIC, SITE_FEATURED],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.name} (${e.data.level})`,
     dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
   },
@@ -323,7 +385,8 @@ export const PROFILE_FIELDS = [
 // Filter dropdowns shown on each section page. Options come from the entries you have saved.
 const FILTERS = {
   project: [{ key: 'role', label: 'Your role' }, { key: 'status', label: 'Status' }, { key: 'type', label: 'Funding type' }, { key: 'area_name', label: 'Priority area' }, { key: 'multi', label: 'Multi-centre' }],
-  award: [{ key: 'level', label: 'Level' }],
+  award: [{ key: 'category', label: 'Kind' }, { key: 'level', label: 'Level' }],
+  mentee: [{ key: 'program', label: 'Programme' }, { key: 'state', label: 'State' }],
   innovation: [{ key: 'patent', label: 'Patent status' }],
   service: [{ key: 'kind', label: 'Kind' }],
   teaching: [{ key: 'mode', label: 'Mode' }],
@@ -338,5 +401,5 @@ const FILTERS = {
 for (const [k, v] of Object.entries(FILTERS)) SECTIONS[k].filters = v;
 
 // Home-screen grouping
-const ACTIVITIES = ['teaching', 'field_visit', 'training', 'meeting', 'support', 'policy', 'peer_review', 'publication'];
+const ACTIVITIES = ['teaching', 'mentee', 'field_visit', 'training', 'meeting', 'support', 'policy', 'peer_review', 'publication'];
 for (const [k, sec] of Object.entries(SECTIONS)) sec.group = ACTIVITIES.includes(k) ? 'Activities' : 'Projects, awards and outputs';

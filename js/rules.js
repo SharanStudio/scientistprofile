@@ -73,11 +73,16 @@ export function validateValues(fields, vals) {
 
 // Turns a section's saved values into the database row. Used by the form and by the upload.
 export function buildRow(key, sec, v) {
-  const { start_date, end_date, before_joining, ...rest } = v;
+  const { start_date, end_date, before_joining, is_public, is_featured, ...rest } = v;
   const data = sec.finalise ? sec.finalise(rest) : rest;
-  return {
+  const row = {
     section: key, start_date, end_date: end_date || null,
     ongoing: sec.ongoingFrom ? !!sec.ongoingFrom(data) : (!!sec.ongoingIfBlank && !end_date),
     before_joining: !!before_joining, data,
   };
+  // The website switches are table columns, not part of data. They are only written when the form sent them,
+  // so the Excel upload (which never sends them) cannot change a record's public status.
+  if (is_public !== undefined) row.is_public = !!is_public;
+  if (is_featured !== undefined) row.is_featured = !!is_featured && !!is_public;
+  return row;
 }

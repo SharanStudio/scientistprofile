@@ -119,7 +119,8 @@ export function buildModel(entries, profile, asOf) {
     /* 12 */ numbered(of('policy'), (e) => [str(e.data.type), str(e.data.title), str(e.data.level), str(e.data.impact), ...flags(e)]),
     /* 13 */ numbered(innov, (e) => [str(e.data.name), str(e.data.area), str(e.data.patent), str(e.data.tech), ...flags(e)]),
     /* 14 */ numbered(of('training'), (e) => [str(e.data.title), str(e.data.type), str(e.data.level), String(e.data.participants ?? ''), ...flags(e)]),
-    /* 15 */ numbered(of('award'), (e) => [str(e.data.name), str(e.data.level), ...flags(e)]),
+    // Only real awards go into the Word table. Grants, invited talks and roles are logged here for the website only.
+    /* 15 */ numbered(of('award').filter((e) => !e.data.category || e.data.category === 'Award'), (e) => [str(e.data.name), str(e.data.level), ...flags(e)]),
     /* 16 */ of('teaching').map((e) => [`${fmtDate(e.start_date)}, ${str(e.data.topic)} – ${str(e.data.course)}`, ...flags(e)]),
     /* 17 */ of('field_visit').map((e) => {
       const d = e.data;

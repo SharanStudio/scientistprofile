@@ -3,6 +3,10 @@ import { MIN_DATE, wordCount, isVisible, cleanValues, validateValues } from './r
 
 // Field options: key, type (text, textarea, select, multicheck, checkbox, date, int, num, url, orcid), label, required,
 // help, max (characters), words (word limit), options, showIf(values), pattern + patternMsg, norm(value), noFuture.
+// An option is a plain string, or { value, label } when the saved value differs from the text shown
+// (a team id and team name, or a research-area slug and its name).
+const opt = (o) => (o !== null && typeof o === 'object' ? o : { value: o, label: o });
+
 export function buildForm(fields, initial = {}) {
   const inputs = {};
   const errs = {};
@@ -18,14 +22,14 @@ export function buildForm(fields, initial = {}) {
       input.value = v ?? '';
     } else if (f.type === 'select') {
       input = h('select', { id }, h('option', { value: '' }, 'Select…'),
-        f.options.map((o) => h('option', { value: o }, o)));
+        f.options.map(opt).map((o) => h('option', { value: o.value }, o.label)));
       input.value = v ?? '';
     } else if (f.type === 'multicheck') {
       const sel = new Set(Array.isArray(v) ? v : []);
-      const items = f.options.map((o) => {
-        const cb = h('input', { type: 'checkbox', value: o });
-        cb.checked = sel.has(o);
-        return h('label', { class: 'multi-item' }, cb, ' ', o);
+      const items = f.options.map(opt).map((o) => {
+        const cb = h('input', { type: 'checkbox', value: o.value });
+        cb.checked = sel.has(o.value);
+        return h('label', { class: 'multi-item' }, cb, ' ', o.label);
       });
       const filter = f.options.length > 12
         ? h('input', { type: 'search', class: 'multi-filter', placeholder: 'Type to filter…', 'aria-label': `Filter ${f.label}` }) : null;
@@ -66,7 +70,8 @@ export function buildForm(fields, initial = {}) {
     }
 
     if (f.type === 'checkbox') {
-      return h('div', { class: 'field check' }, h('label', { for: id }, input, ' ', f.label), err);
+      return h('div', { class: 'field check' }, h('label', { for: id }, input, ' ', f.label),
+        f.help ? h('div', { class: 'hint' }, f.help) : null, err);
     }
     return h('div', { class: 'field' },
       h('label', { for: f.type === 'multicheck' ? false : id }, f.label, f.required ? h('span', { class: 'req', 'aria-hidden': 'true' }, ' *') : null),
