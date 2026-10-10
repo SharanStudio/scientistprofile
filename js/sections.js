@@ -24,6 +24,8 @@ const RESEARCH_AREA_FALLBACK = [
 const SITE_PUBLIC = { key: 'is_public', type: 'checkbox', label: 'Show on my public website',
   help: 'Off by default. Nothing appears on the website until you tick this.' };
 const SITE_FEATURED = { key: 'is_featured', type: 'checkbox', label: 'Feature on the home page', showIf: (v) => !!v.is_public };
+const SITE_SUMMARY = { key: 'site_summary', type: 'textarea', label: 'Short description for the website', words: 40, rows: 2,
+  help: 'Optional. One or two plain sentences, 40 words or fewer. Shown on the project card.' };
 const SITE_AREAS = { key: 'research_areas', type: 'multicheck', label: 'Research areas', optionsFrom: 'research_areas',
   options: RESEARCH_AREA_FALLBACK, help: 'Tick all that apply. The website uses these to group the work.' };
 const SITE_TEAM = { key: 'team_id', type: 'select', label: 'Team', optionsFrom: 'teams',
@@ -42,7 +44,6 @@ export const SECTIONS = {
       { key: 'course', type: 'text', label: 'Course / cohort', required: true, max: 200 },
       { key: 'mode', type: 'select', label: 'Mode', required: true, options: ['In-person', 'Online', 'Hands-on'] },
     ],
-    siteFields: [SITE_PUBLIC],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.topic} – ${e.data.course} (${e.data.mode})`,
     dupKey: (e) => [e.start_date, (e.data.topic || '').toLowerCase()].join('|'),
   },
@@ -100,6 +101,7 @@ export const SECTIONS = {
       { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank for a single-day event.', noFuture: true },
       { key: 'participants', type: 'int', label: 'Number of participants', required: true, min: 1 },
     ],
+    siteFields: [SITE_PUBLIC],
     summary: (e) => `${e.data.title} (${e.data.type}, ${e.data.level}), ${rangeText(e)}, ${e.data.participants} participants`,
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
@@ -178,6 +180,7 @@ export const SECTIONS = {
       { key: 'impact', type: 'textarea', label: 'Details of research, policy, or practice impact', required: true, max: 600, rows: 4 },
       { key: 'start_date', col: true, type: 'date', label: 'Date', required: true, noFuture: true },
     ],
+    siteFields: [SITE_PUBLIC, SITE_FEATURED],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.title} (${e.data.type}, ${e.data.level})`,
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
@@ -258,7 +261,7 @@ export const SECTIONS = {
         help: 'Completed: the actual end date (required). Ongoing: the expected end date, if known.',
         check: (val, v) => (v.status === 'Completed' && val > today() ? 'A completed project cannot end in the future.' : '') },
     ],
-    siteFields: [SITE_AREAS, SITE_STATES, SITE_TEAM, SITE_PUBLIC, SITE_FEATURED],
+    siteFields: [SITE_AREAS, SITE_STATES, SITE_TEAM, SITE_SUMMARY, SITE_PUBLIC],
     finalise: (d) => ({ ...d, area_name: d.area === 'Others' ? d.area_other : d.area }),
     summary: (e) => {
       const d = e.data;
