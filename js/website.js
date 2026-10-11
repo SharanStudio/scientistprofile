@@ -42,6 +42,15 @@ export function toRow(v) {
   };
 }
 
+// Asks the publish-site function to rebuild the public site. Only the site owner is accepted, enforced on the server.
+export async function requestRebuild(sb) {
+  const { data, error } = await sb.functions.invoke('publish-site');
+  if (!error && data && data.ok) return { ok: true, message: 'Rebuild started. Your changes appear on the website in about two minutes.' };
+  let detail = '';
+  try { const body = error && error.context && await error.context.json(); detail = (body && body.error) || ''; } catch { /* no body */ }
+  return { ok: false, message: detail || (error && error.message) || 'The rebuild could not be started.' };
+}
+
 export async function viewWebsite({ sb, shell, loadingShell, friendly, setFlash, state }) {
   if (!state.isOwner) return shell('Website', h('div', { class: 'flash warn' }, 'The website settings belong to the site owner.'));
   loadingShell('Website');
@@ -59,6 +68,15 @@ export async function viewWebsite({ sb, shell, loadingShell, friendly, setFlash,
     if (err) setFlash('error', friendly(err)); else setFlash('ok', 'Website settings saved. The site picks them up at its next rebuild.');
     return viewWebsite({ sb, shell, loadingShell, friendly, setFlash, state });
   });
+  const pub = h('button', { class: 'secondary', title: 'Rebuild the public website from the latest data' }, 'Update website now');
+  const note = h('p', { class: 'hint', role: 'status' }, 'Edits show on the website after a rebuild. It runs every night at 2:00 AM, or press the button for about two minutes.');
+  pub.addEventListener('click', async () => {
+    pub.disabled = true; pub.textContent = 'Starting…';
+    const r = await requestRebuild(sb);
+    pub.disabled = false; pub.textContent = 'Update website now';
+    note.textContent = r.message;
+    note.className = r.ok ? 'hint ok' : 'hint error';
+  });
   shell('Website', h('p', { class: 'lede' }, 'These details build the hero, about, education and Collaborate pages of your public website.'),
-    form.el, h('div', { class: 'actions' }, btn));
+    form.el, h('div', { class: 'actions' }, btn, pub), note);
 }
