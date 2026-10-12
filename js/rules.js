@@ -77,7 +77,7 @@ export function buildRow(key, sec, v) {
   const data = sec.finalise ? sec.finalise(rest) : rest;
   const row = {
     section: key, start_date, end_date: end_date || null,
-    ongoing: sec.ongoingFrom ? !!sec.ongoingFrom(data) : (!!sec.ongoingIfBlank && !end_date),
+    ongoing: sec.ongoingFrom ? !!sec.ongoingFrom(data, end_date) : (!!sec.ongoingIfBlank && !end_date),
     before_joining: !!before_joining, data,
   };
   // The website switches are table columns, not part of data. They are only written when the form sent them,

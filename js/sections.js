@@ -33,6 +33,16 @@ const SITE_TEAM = { key: 'team_id', type: 'select', label: 'Team', optionsFrom: 
 const SITE_STATES = { key: 'states', type: 'multicheck', label: 'States covered', options: STATES_WITH_NATIONAL,
   help: 'Tick every state. National (Pan-India) covers the whole country and does not count as a state in the website numbers.' };
 
+// Achievements: one form, six kinds. The first four are personal honours (website, and the Word "Awards" table for
+// "Award" only). The last two feed two Word tables that used to have their own sections. profile-data.js uses the
+// same kind names as plain strings, so keep the two files in step.
+const HONOUR_KINDS = ['Award', 'Fellowship or grant', 'Invited talk or keynote', 'Role or appointment'];
+const KIND_RECOGNITION = 'Institutional recognition';
+const KIND_FINDING = 'Notable research finding';
+const isHonour = (v) => HONOUR_KINDS.includes(v.category);
+const isFinding = (v) => v.category === KIND_FINDING;
+const hasDetails = (v) => v.category === KIND_RECOGNITION || v.category === KIND_FINDING;
+
 export const SECTIONS = {
   teaching: {
     label: 'Teaching',
@@ -273,10 +283,12 @@ export const SECTIONS = {
     },
     dupKey: (e) => (e.data.name || '').toLowerCase().slice(0, 80),
   },
+  // Retired: now the "Institutional recognition" kind under Achievements. Kept hidden so any row saved here earlier
+  // still opens, lists and reports.
   recognition: {
-    label: 'Recognition',
+    label: 'Recognition (old)',
     blurb: 'International standing, WHO centres, accreditations',
-    enabled: true,
+    enabled: false,
     fields: [
       { key: 'details', type: 'textarea', label: 'Details', required: true, rows: 3, max: 600 },
       { key: 'start_date', col: true, type: 'date', label: 'Date received', required: true, noFuture: true },
@@ -285,33 +297,42 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.details || '').toLowerCase().slice(0, 60)].join('|'),
   },
   award: {
-    label: 'Awards and honours',
-    blurb: 'Awards received since joining',
+    label: 'Achievements',
+    blurb: 'Awards, honours, recognition, notable research findings',
     enabled: true,
+    // A research finding with no end date is still continuing, so it counts up to the report date.
+    ongoingFrom: (d, end) => isFinding(d) && !end,
     fields: [
-      { key: 'category', type: 'select', label: 'Kind of recognition', required: true,
-        options: ['Award', 'Fellowship or grant', 'Invited talk or keynote', 'Role or appointment'],
-        help: 'Only "Award" goes into the Word profile. All kinds can appear on the website.' },
-      { key: 'name', type: 'text', label: 'Name of the award', required: true, max: 300 },
+      { key: 'category', type: 'select', label: 'Kind', required: true,
+        options: [...HONOUR_KINDS, KIND_RECOGNITION, KIND_FINDING],
+        help: 'Word profile: "Award" goes to Awards and honours, "Institutional recognition" to International standing and recognition, and "Notable research finding" to Notable contributions in research. The other kinds are for the website only.' },
+      { key: 'name', type: 'text', label: 'Title', required: true, max: 300,
+        help: 'The name of the award, or a short title for the recognition or finding.' },
       { key: 'awarding_body', type: 'text', label: 'Awarding body', required: true, max: 250,
-        help: 'For example: CDC, ICMR-NIE.' },
-      { key: 'level', type: 'select', label: 'Level', required: true, options: ['Institute', 'National', 'International'] },
-      { key: 'start_date', col: true, type: 'date', label: 'Date received', required: true, noFuture: true },
-      { key: 'description', type: 'textarea', label: 'Short description (optional)', rows: 3, max: 300 },
+        help: 'For example: CDC, ICMR-NIE.', showIf: isHonour },
+      { key: 'level', type: 'select', label: 'Level', required: true, options: ['Institute', 'National', 'International'], showIf: isHonour },
+      { key: 'details', type: 'textarea', label: 'Details', required: true, rows: 5, max: 1200, showIf: hasDetails,
+        help: 'Institutional recognition: what was recognised and by whom (for example a WHO collaborating centre). Notable research finding: the key findings from key studies or projects you led.' },
+      { key: 'start_date', col: true, type: 'date', label: 'Date', required: true, noFuture: true,
+        help: 'The date received. For a notable research finding, the date the work began.' },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', showIf: isFinding,
+        help: 'Leave blank if the contribution is continuing.' },
+      { key: 'description', type: 'textarea', label: 'Short description for the website (optional)', rows: 3, max: 300 },
       { key: 'link', type: 'url', label: 'Link (optional)', help: 'A page that announces or confirms it.' },
-      { key: 'certificate_path', type: 'text', label: 'Certificate file (optional)', max: 200,
+      { key: 'certificate_path', type: 'text', label: 'Certificate file (optional)', max: 200, showIf: isHonour,
         help: 'The file path inside the website assets folder, for example assets/certificates/cdc-2025.pdf',
         pattern: /^(?![/.])(?!.*\.\.)[\w\-./]+\.(?:pdf|png|jpe?g|webp)$/i,
         patternMsg: 'Use a relative path ending in .pdf, .png, .jpg or .webp, for example assets/certificates/cdc-2025.pdf' },
     ],
     siteFields: [SITE_PUBLIC, SITE_FEATURED],
-    summary: (e) => `${fmtDate(e.start_date)}: ${e.data.name} (${e.data.level})`,
+    summary: (e) => `${fmtDate(e.start_date)}: ${e.data.name} (${e.data.level || e.data.category})`,
     dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
   },
+  // Retired: now the "Notable research finding" kind under Achievements (see the note on Recognition above).
   notable: {
-    label: 'Notable contributions',
+    label: 'Notable contributions (old)',
     blurb: 'Key findings from studies you led',
-    enabled: true,
+    enabled: false,
     ongoingIfBlank: true,
     fields: [
       { key: 'details', type: 'textarea', label: 'Details', required: true, rows: 6, max: 1200,
