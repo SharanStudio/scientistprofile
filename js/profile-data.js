@@ -94,8 +94,12 @@ export function buildModel(entries, profile, asOf) {
   const cs = services.filter((e) => e.data.kind === 'Clinical support');
   const innov = of('innovation');
 
+  // Institutional recognition and notable research findings are now kinds of Achievement (section 'award'). Rows saved
+  // earlier in the retired Recognition and Notable sections still report here, so no old entry drops out.
+  const ofKind = (legacy, kind) => [...of(legacy), ...of('award').filter((e) => e.data.category === kind)].sort(byDateDesc);
+
   const tables = [
-    /* 0 */ of('recognition').map((e) => [str(e.data.details), ...flags(e)]),
+    /* 0 */ ofKind('recognition', 'Institutional recognition').map((e) => [str(e.data.details), ...flags(e)]),
     /* 1 */ pi.filter(listed).map((e) => projRow(e, false)),
     /* 2 */ coi.filter(listed).map((e) => projRow(e, true)),
     /* 3 */ research.filter(sinceJoin).map((e, i) => {
@@ -104,7 +108,7 @@ export function buildModel(entries, profile, asOf) {
         d.impact_factor == null ? '' : String(d.impact_factor), str(d.link), str(d.type), ...pubFlags(e), str(d.summary)];
     }),
     /* 4 */ null, /* 5 */ null, // count tables, filled below
-    /* 6 */ of('notable').map((e) => [str(e.data.details), ...flags(e)]),
+    /* 6 */ ofKind('notable', 'Notable research finding').map((e) => [str(e.data.details), ...flags(e)]),
     /* 7 */ numbered(val, (e) => [str(e.data.tech_name), str(e.data.tech_area), str(e.data.firm), ...flags(e)]),
     /* 8 */ numbered(dx, (e) => [str(e.data.dx_condition), str(e.data.dx_test), String(e.data.dx_samples ?? ''), ...flags(e)]),
     /* 9 */ numbered(cs, (e) => [str(e.data.cs_condition), str(e.data.cs_support), String(e.data.cs_patients ?? ''), ...flags(e)]),

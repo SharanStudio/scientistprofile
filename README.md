@@ -16,7 +16,8 @@ Entries can feed the public website. Each entry form (publication, project, awar
 - Team, research-area and mentee-programme dropdowns come from the tables `teams`, `research_areas` and `mentee_programs` (`js/lookups.js`). Add a row there and it appears in the forms. Manage teams in Supabase.
 - Website fields live in a section's `siteFields`, not in `fields`, so the Word export and the Excel upload template are unchanged.
 - Mentees hold the person's email privately. A mentee's name shows on the website only when "agreed to be named" is ticked, but every mentee counts in "officers mentored".
-- Only awards of kind "Award" go into the Word profile. Grants, invited talks and roles are for the website.
+- Achievements (stored as section `award`) is one form with six kinds. In the Word profile, kind "Award" fills Awards and honours, "Institutional recognition" fills International standing and recognition, and "Notable research finding" fills Notable contributions in research. Grants, invited talks and roles are for the website only.
+- The old Recognition and Notable contributions sections are retired from the home screen but stay in the database allowed list. Any row saved there earlier still reports in the same Word tables.
 
 ## Website page (site owner only)
 

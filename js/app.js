@@ -113,6 +113,7 @@ function viewHome() {
   const counts = {};
   const groups = {};
   for (const [key, sec] of Object.entries(SECTIONS)) {
+    if (!sec.enabled) continue; // retired sections stay in the data but get no tile
     counts[key] = h('span', { class: 'n' }, ' ');
     (groups[sec.group] ||= []).push(h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]));
   }
