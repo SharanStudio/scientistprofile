@@ -56,6 +56,7 @@ button.link{min-height:0;border:0;background:none;padding:0;display:inline}
 a.tile:hover{border-color:var(--brand);transform:translateY(-1px)}
 .tile span{color:var(--muted);font-size:.88rem}
 .tile.soon{opacity:.55}
+details.others{margin-top:.8rem}details.others summary{cursor:pointer;padding:.4rem 0;font-weight:600;color:var(--link)}details.others .tiles{margin-top:.6rem}
 .tile.ghost{background:transparent}
 .rows{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow)}
 .row{padding:.85rem 1rem;border-bottom:1px solid var(--line);display:grid;gap:.4rem}
