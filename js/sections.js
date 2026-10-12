@@ -58,7 +58,7 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.topic || '').toLowerCase()].join('|'),
   },
   mentee: {
-    label: 'Mentees',
+    label: 'Mentor details',
     blurb: 'Officers and scholars you mentor',
     enabled: true,
     fields: [
@@ -82,7 +82,7 @@ export const SECTIONS = {
     dupKey: (e) => [(e.data.name || '').toLowerCase(), (e.data.organisation || '').toLowerCase()].join('|'),
   },
   field_visit: {
-    label: 'Field visit',
+    label: 'Field visits',
     blurb: 'Visits to districts, states or outbreak sites',
     enabled: true,
     fields: [
@@ -100,8 +100,8 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.project || '').toLowerCase(), (e.data.district || '').toLowerCase()].join('|'),
   },
   training: {
-    label: 'Training / workshop organised',
-    blurb: 'Events run by ICMR-NIE',
+    label: 'Training conducted',
+    blurb: 'Seminars, workshops and trainings run by ICMR-NIE',
     enabled: true,
     fields: [
       { key: 'title', type: 'text', label: 'Title', required: true, max: 250 },
@@ -116,8 +116,8 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
   meeting: {
-    label: 'Committee and interview meetings',
-    blurb: 'Internal committees, interview panels',
+    label: 'Meetings attended',
+    blurb: 'Internal committee and interview meetings',
     enabled: true,
     fields: [
       { key: 'kind', type: 'select', label: 'What was it?', required: true, options: ['Committee meeting', 'Interview meeting'] },
@@ -135,7 +135,7 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
   },
   support: {
-    label: 'Programme support',
+    label: 'Programme and outbreak support',
     blurb: 'National and state programmes, outbreak roles',
     enabled: true,
     ongoingIfBlank: true,
@@ -208,7 +208,7 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.journal || '').toLowerCase(), e.data.role].join('|'),
   },
   publication: {
-    label: 'Publication',
+    label: 'Publications',
     blurb: 'Research and non-research outputs',
     enabled: true,
     beforeJoining: true,
@@ -247,7 +247,7 @@ export const SECTIONS = {
     dupKey: (e) => (e.data.doi || (e.data.citation || '').toLowerCase().slice(0, 80)),
   },
   project: {
-    label: 'Projects',
+    label: 'Project details',
     blurb: 'As PI / joint PI or co-investigator',
     enabled: true,
     ongoingFrom: (d) => d.status === 'Ongoing',
@@ -424,6 +424,13 @@ const FILTERS = {
 };
 for (const [k, v] of Object.entries(FILTERS)) SECTIONS[k].filters = v;
 
-// Home-screen grouping
-const ACTIVITIES = ['teaching', 'mentee', 'field_visit', 'training', 'meeting', 'support', 'policy', 'peer_review', 'publication'];
-for (const [k, sec] of Object.entries(SECTIONS)) sec.group = ACTIVITIES.includes(k) ? 'Activities' : 'Projects, awards and outputs';
+// Home-screen layout, in display order. A key is a section; 'summaries', 'reports' and 'team' are pages that are not sections.
+// `others` tiles sit in a collapsed "Others (less used)" box. An enabled section missing from every list falls into the
+// Output "Others" box, so a new section never vanishes from the home screen.
+export const HOME_GROUPS = [
+  { name: 'Activities', keys: ['teaching', 'training', 'field_visit', 'meeting', 'support'] },
+  { name: 'Projects & team', keys: ['project', 'team', 'summaries'] },
+  { name: 'Output', keys: ['publication', 'award', 'policy'], others: ['innovation', 'service', 'peer_review'] },
+  { name: 'Mentoring', keys: ['mentee'] },
+  { name: 'Reports', keys: ['reports'] },
+];

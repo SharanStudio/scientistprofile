@@ -4,7 +4,7 @@ import { h } from './dom.js';
 import { buildForm } from './forms.js';
 import { buildRow } from './rules.js';
 import { loadLookups, resolveOptions } from './lookups.js';
-import { SECTIONS, PROFILE_FIELDS } from './sections.js';
+import { SECTIONS, PROFILE_FIELDS, HOME_GROUPS } from './sections.js';
 import { applyFilters, facetValues, yearsIn, isFiltered } from './filters.js';
 import { viewSummaries, viewSummaryEditor } from './summaries.js';
 import { viewReports, viewReportBuilder } from './reports.js';
@@ -111,22 +111,37 @@ function viewHome() {
   const p = state.profile;
   const needProfile = !p || !p.full_name || !p.joining_date;
   const counts = {};
-  const groups = {};
-  for (const [key, sec] of Object.entries(SECTIONS)) {
-    if (!sec.enabled) continue; // retired sections stay in the data but get no tile
+  const tile = (key) => {
+    const sec = SECTIONS[key];
     counts[key] = h('span', { class: 'n' }, ' ');
-    (groups[sec.group] ||= []).push(h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]));
-  }
+    return h('a', { class: 'tile', href: `#/s/${key}` }, h('strong', {}, sec.label), h('span', {}, sec.blurb), counts[key]);
+  };
+  // Pages that are not entry sections
   counts.summaries = h('span', { class: 'n' }, ' ');
   counts.reports = h('span', { class: 'n' }, ' ');
-  groups['Projects, awards and outputs'].push(h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
-    h('span', {}, 'Rich-text summaries, several per project if needed'), counts.summaries));
-  groups['Projects, awards and outputs'].push(h('a', { class: 'tile', href: '#/reports' }, h('strong', {}, 'Reports'),
-    h('span', {}, 'Choose and order summaries, keep saved reports'), counts.reports));
+  const pages = {
+    summaries: () => h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
+      h('span', {}, 'Rich-text summaries, several per project if needed'), counts.summaries),
+    reports: () => h('a', { class: 'tile', href: '#/reports' }, h('strong', {}, 'Reports'),
+      h('span', {}, 'Choose and order summaries, keep saved reports'), counts.reports),
+    team: () => h('div', { class: 'tile soon' }, h('strong', {}, 'Team details'),
+      h('span', {}, 'Teams and their members. Coming next; for now they are managed in Supabase.')),
+  };
+  const make = (key) => (pages[key] ? pages[key]() : SECTIONS[key] && SECTIONS[key].enabled ? tile(key) : null);
+  const placed = new Set(HOME_GROUPS.flatMap((g) => [...g.keys, ...(g.others || [])]));
+  const stray = Object.keys(SECTIONS).filter((k) => SECTIONS[k].enabled && !placed.has(k));
+  const body = HOME_GROUPS.map((g) => {
+    const others = [...(g.others || []), ...(g.name === 'Output' ? stray : [])].map(make).filter(Boolean);
+    return [
+      h('h2', {}, g.name),
+      h('div', { class: 'tiles' }, g.keys.map(make).filter(Boolean)),
+      others.length ? h('details', { class: 'others' }, h('summary', {}, 'Others (less used)'), h('div', { class: 'tiles' }, others)) : null,
+    ];
+  });
   shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
-    Object.entries(groups).map(([name, tiles]) => [h('h2', {}, name), h('div', { class: 'tiles' }, tiles)]));
+    body);
   sb.from('entries').select('section').then(({ data }) => {
     if (!data) return;
     const n = {};
