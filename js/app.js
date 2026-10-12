@@ -10,6 +10,7 @@ import { viewSummaries, viewSummaryEditor } from './summaries.js';
 import { viewReports, viewReportBuilder } from './reports.js';
 import { viewImport } from './import-view.js';
 import { viewWebsite } from './website.js';
+import { viewTeam } from './team.js';
 
 const root = document.getElementById('app');
 const state = { session: null, profile: null, isOwner: false, flash: null, filters: {} };
@@ -119,11 +120,14 @@ function viewHome() {
   };
   // Pages that are not entry sections
   counts.summaries = h('span', { class: 'n' }, ' ');
+  counts.team = h('span', { class: 'n' }, ' ');
   const pages = {
     summaries: () => h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
       h('span', {}, 'Rich-text summaries, several per project if needed'), counts.summaries),
-    team: () => h('div', { class: 'tile soon' }, h('strong', {}, 'Team details'),
-      h('span', {}, 'Teams and their members. Coming next; for now they are managed in Supabase.')),
+    // Only the admin account manages teams, so other scientists never see this tile.
+    team: () => (state.profile && state.profile.role === 'admin'
+      ? h('a', { class: 'tile', href: '#/team' }, h('strong', {}, 'Team details'),
+        h('span', {}, 'Teams, people, and who sits in which team'), counts.team) : null),
   };
   const make = (key) => (pages[key] ? pages[key]() : SECTIONS[key] && SECTIONS[key].enabled ? tile(key) : null);
   const placed = new Set(HOME_GROUPS.flatMap((g) => [...g.keys, ...(g.others || [])]));
@@ -140,11 +144,17 @@ function viewHome() {
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
     body);
+  if (state.profile && state.profile.role === 'admin') {
+    Promise.all([sb.from('teams').select('id', { count: 'exact', head: true }), sb.from('people').select('id', { count: 'exact', head: true })])
+      .then(([t, p2]) => {
+        if (t.count != null && p2.count != null) counts.team.textContent = `${t.count} ${t.count === 1 ? 'team' : 'teams'} · ${p2.count} ${p2.count === 1 ? 'person' : 'people'}`;
+      });
+  }
   sb.from('entries').select('section').then(({ data }) => {
     if (!data) return;
     const n = {};
     data.forEach((r) => { n[r.section] = (n[r.section] || 0) + 1; });
-    for (const k of Object.keys(counts)) if (k !== 'summaries') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+    for (const k of Object.keys(counts)) if (k !== 'summaries' && k !== 'team') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
     sb.from('summaries').select('slug,project_id,created_at,flag:blocks->>none').order('created_at', { ascending: false }).then(({ data: rows }) => {
       if (!rows) return;
       const seen = new Map();
@@ -360,6 +370,7 @@ async function route() {
     const ctx = { sb, shell, loadingShell, friendly, setFlash, go, state };
     if (parts[0] === 'profile') return viewProfile();
     if (parts[0] === 'website') return await viewWebsite(ctx);
+    if (parts[0] === 'team') return await viewTeam(ctx, parts.slice(1));
     if (parts[0] === 'summaries') return await viewSummaries(ctx);
     if (parts[0] === 'summary' && parts[1]) return await viewSummaryEditor(ctx, parts[1], parts[2]);
     if (parts[0] === 'import') return viewImport(ctx);
