@@ -60,6 +60,7 @@ function render(title, withFlash, content) {
   const nav = state.session ? h('nav', {},
     h('a', { href: '#/' }, 'Home'),
     h('a', { href: '#/profile' }, 'Profile'),
+    h('a', { href: '#/reports', title: 'Build and download the Scientist Profile (Word) or CV (Excel)' }, 'Download reports'),
     state.isOwner ? h('a', { href: '#/website' }, 'Website') : null,
     h('a', { href: '#/import' }, 'Upload'),
     h('button', { class: 'link', title: 'Download the Excel workbook for uploading past records', onclick: downloadTemplate }, 'Template'),
@@ -118,12 +119,9 @@ function viewHome() {
   };
   // Pages that are not entry sections
   counts.summaries = h('span', { class: 'n' }, ' ');
-  counts.reports = h('span', { class: 'n' }, ' ');
   const pages = {
     summaries: () => h('a', { class: 'tile', href: '#/summaries' }, h('strong', {}, 'One-page summaries'),
       h('span', {}, 'Rich-text summaries, several per project if needed'), counts.summaries),
-    reports: () => h('a', { class: 'tile', href: '#/reports' }, h('strong', {}, 'Reports'),
-      h('span', {}, 'Choose and order summaries, keep saved reports'), counts.reports),
     team: () => h('div', { class: 'tile soon' }, h('strong', {}, 'Team details'),
       h('span', {}, 'Teams and their members. Coming next; for now they are managed in Supabase.')),
   };
@@ -146,7 +144,7 @@ function viewHome() {
     if (!data) return;
     const n = {};
     data.forEach((r) => { n[r.section] = (n[r.section] || 0) + 1; });
-    for (const k of Object.keys(counts)) if (k !== 'summaries' && k !== 'reports') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
+    for (const k of Object.keys(counts)) if (k !== 'summaries') counts[k].textContent = `${n[k] || 0} ${n[k] === 1 ? 'entry' : 'entries'}`;
     sb.from('summaries').select('slug,project_id,created_at,flag:blocks->>none').order('created_at', { ascending: false }).then(({ data: rows }) => {
       if (!rows) return;
       const seen = new Map();
@@ -154,9 +152,6 @@ function viewHome() {
       const real = [...seen.values()].filter((r) => r.project_id && !(r.flag === 'true' || r.flag === true));
       const projects = new Set(real.map((r) => r.project_id)).size;
       counts.summaries.textContent = `${real.length} ${real.length === 1 ? 'summary' : 'summaries'} · ${projects} of ${n.project || 0} projects`;
-    });
-    sb.from('reports').select('id', { count: 'exact', head: true }).then(({ count }) => {
-      if (count != null) counts.reports.textContent = `${count} saved`;
     });
   });
 }

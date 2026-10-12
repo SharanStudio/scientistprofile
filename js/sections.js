@@ -58,7 +58,7 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.topic || '').toLowerCase()].join('|'),
   },
   mentee: {
-    label: 'Mentor details',
+    label: 'Mentee details',
     blurb: 'Officers and scholars you mentor',
     enabled: true,
     fields: [
@@ -116,22 +116,31 @@ export const SECTIONS = {
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
   meeting: {
-    label: 'Meetings attended',
-    blurb: 'Internal committee and interview meetings',
+    label: 'Meetings and trainings attended',
+    blurb: 'Committee and interview meetings, trainings you attended',
     enabled: true,
     fields: [
-      { key: 'kind', type: 'select', label: 'What was it?', required: true, options: ['Committee meeting', 'Interview meeting'] },
-      { key: 'start_date', col: true, type: 'date', label: 'Date', required: true, noFuture: true },
+      { key: 'kind', type: 'select', label: 'What was it?', required: true, options: ['Committee meeting', 'Interview meeting', 'Training attended'] },
+      { key: 'start_date', col: true, type: 'date', label: 'Date', required: true, noFuture: true,
+        help: 'For a training that ran over several days, the first day.' },
+      { key: 'end_date', col: true, type: 'date', label: 'End date', showIf: (v) => v.kind === 'Training attended',
+        help: 'Leave blank for a one-day training.' },
       { key: 'committee', type: 'select', label: 'Committee', required: true, options: ['Media & Communications', 'Library', 'Others'],
         showIf: (v) => v.kind === 'Committee meeting' },
       { key: 'committee_other', type: 'text', label: 'Committee name', required: true, max: 200,
         showIf: (v) => v.kind === 'Committee meeting' && v.committee === 'Others' },
       { key: 'meeting_name', type: 'text', label: 'Meeting name', required: true, max: 250,
         showIf: (v) => v.kind === 'Interview meeting' },
+      { key: 'training_name', type: 'text', label: 'Training name', required: true, max: 250,
+        showIf: (v) => v.kind === 'Training attended' },
     ],
-    // name = the text printed in the Word table
-    finalise: (d) => ({ ...d, name: d.kind === 'Committee meeting' ? (d.committee === 'Others' ? d.committee_other : d.committee) : d.meeting_name }),
-    summary: (e) => `${fmtDate(e.start_date)}, ${e.data.name} (${e.data.kind === 'Interview meeting' ? 'interview' : 'committee'})`,
+    // name = the text printed in the Word table. Trainings attended have no Word table yet, so they are stored only.
+    finalise: (d) => ({
+      ...d,
+      name: d.kind === 'Committee meeting' ? (d.committee === 'Others' ? d.committee_other : d.committee)
+        : d.kind === 'Interview meeting' ? d.meeting_name : d.training_name,
+    }),
+    summary: (e) => `${rangeText(e)}, ${e.data.name} (${e.data.kind === 'Interview meeting' ? 'interview' : e.data.kind === 'Training attended' ? 'training attended' : 'committee'})`,
     dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
   },
   support: {
@@ -424,7 +433,7 @@ const FILTERS = {
 };
 for (const [k, v] of Object.entries(FILTERS)) SECTIONS[k].filters = v;
 
-// Home-screen layout, in display order. A key is a section; 'summaries', 'reports' and 'team' are pages that are not sections.
+// Home-screen layout, in display order. A key is a section; 'summaries' and 'team' are pages that are not sections.
 // `others` tiles sit in a collapsed "Others (less used)" box. An enabled section missing from every list falls into the
 // Output "Others" box, so a new section never vanishes from the home screen.
 export const HOME_GROUPS = [
@@ -432,5 +441,4 @@ export const HOME_GROUPS = [
   { name: 'Projects & team', keys: ['project', 'team', 'summaries'] },
   { name: 'Output', keys: ['publication', 'award', 'policy'], others: ['innovation', 'service', 'peer_review'] },
   { name: 'Mentoring', keys: ['mentee'] },
-  { name: 'Reports', keys: ['reports'] },
 ];
