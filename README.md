@@ -22,3 +22,14 @@ Entries can feed the public website. Each entry form (publication, project, awar
 ## Website page (site owner only)
 
 The owner sees a Website page and the website boxes on entry forms. Everyone else sees neither. Ownership comes from `public.is_site_owner()`. Run `supabase/migrations/20261010_site_owner_website_page.sql` once before using the page.
+
+## Team details (admin only)
+
+The Team details page (`#/team`) manages the tables `teams`, `people` and `team_memberships` that feed the website's Teams page. Only an admin account (`profiles.role = 'admin'`) sees the tile and can write; row-level security enforces this on the server.
+
+- Teams tab: add and edit teams. A team page lists its members, with Add member, Edit, End today and Remove.
+- People tab: add and edit people. A person can sit in more than one team. "＋ New person…" on a team page creates a private person on the spot.
+- Photos and team images are file paths inside the website assets folder, not uploads. A person's photo shows on the website only when "photo consent" is ticked.
+- The web address (slug) is made from the name once, when the record is created, and never changes on edit.
+- A team or person with members or projects cannot be deleted. End the membership, or untick "Show on public website".
+- `js/team-data.js` holds the field lists and row builders (pure, testable in Node). `js/team.js` holds the page.
