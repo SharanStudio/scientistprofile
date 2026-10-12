@@ -122,3 +122,4 @@ ul.errlist li{margin:.3rem 0;overflow-wrap:anywhere}
 details.tile summary,section.tile details summary{cursor:pointer}
 @media (max-width:480px){table.results{font-size:.82rem}table.results th,table.results td{padding:.4rem .2rem}}
 section.tile+.field,.flash+section.tile{margin-top:1rem}section.tile{margin-bottom:1rem}
+.hint.ok{color:var(--ok,#1b6b3a)} .hint.error{color:var(--danger,#a32020)}
