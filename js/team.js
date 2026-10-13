@@ -1,6 +1,7 @@
 import { h, today } from './dom.js';
 import { buildForm } from './forms.js';
 import { fmtDate } from './sections.js';
+import { dataTable, iconLink, deleteButton, pill } from './ui.js';
 import {
   teamFields, personFields, memberFields, slugify, uniqueSlug, toTeamRow, toPersonRow, toMembershipRow,
   roleToForm, leadMissing, NEW_PERSON,
@@ -37,8 +38,8 @@ function confirmButton(label, onConfirm) {
 const when = (m) => (m.end_date ? `${fmtDate(m.start_date)}–${fmtDate(m.end_date)}` : m.start_date ? `since ${fmtDate(m.start_date)}` : 'current');
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const visibility = (r) => [
-  h('span', { class: `tag${r.is_public ? ' ok' : ''}` }, r.is_public ? 'public' : 'private'),
-  r.is_featured ? h('span', { class: 'tag ok' }, 'featured') : null,
+  pill(r.is_public ? 'public' : 'private', r.is_public ? 'ok' : ''),
+  r.is_featured ? pill('featured', 'ok') : null,
 ];
 
 export async function viewTeam(ctx, parts = []) {
@@ -71,9 +72,9 @@ async function teamsList(ctx) {
     return { members: members.length, current: members.filter((x) => !x.end_date).length, projects: projects.length, ongoing: projects.filter((x) => x.ongoing).length };
   };
 
-  const row = (team) => {
+  const removeTeam = (team) => {
     const s = stats(team.id);
-    const del = confirmButton('Delete', async () => {
+    return async () => {
       if (s.members || s.projects) {
         const has = [s.members ? plural(s.members, 'member record', 'member records') : '', s.projects ? plural(s.projects, 'project', 'projects') : ''].filter(Boolean).join(' and ');
         setFlash('error', `"${team.name}" still has ${has}. Remove the members and move the projects to another team first. To hide the team, untick "Show on public website" instead.`);
@@ -82,16 +83,17 @@ async function teamsList(ctx) {
       const { error } = await sb.from('teams').delete().eq('id', team.id);
       setFlash(error ? 'error' : 'ok', error ? friendly(error) : 'Team deleted.');
       return teamsList(ctx);
-    });
-    return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, h('strong', {}, team.name), visibility(team),
-        h('div', { class: 'hint' }, `${plural(s.current, 'current member', 'current members')} · ${plural(s.ongoing, 'ongoing project', 'ongoing projects')}`)),
-      h('div', { class: 'row-actions' }, h('a', { href: `#/team/t/${team.id}` }, 'Edit'), del));
+    };
   };
 
-  shell(TITLE, tabs('teams'),
-    h('div', { class: 'toolbar' }, h('a', { class: 'btn primary', href: '#/team/t/new' }, 'Add team')),
-    t.data.length ? h('ul', { class: 'rows' }, t.data.map(row)) : h('p', { class: 'empty' }, 'No teams yet. Add your first team.'),
+  shell({ title: TITLE, eyebrow: 'Projects & team', action: { href: '#/team/t/new', label: 'Add team' } }, tabs('teams'),
+    t.data.length ? dataTable({ caption: 'Teams', rows: t.data,
+      columns: [
+        { label: 'Team', primary: true, get: (x) => x.name },
+        { label: 'Members', get: (x) => plural(stats(x.id).current, 'current member', 'current members') },
+        { label: 'Projects', get: (x) => plural(stats(x.id).ongoing, 'ongoing project', 'ongoing projects') },
+        { label: 'Website', get: (x) => visibility(x) }],
+      actions: (x) => [iconLink(`#/team/t/${x.id}`, `Edit ${x.name}`), deleteButton(`Delete ${x.name}`, removeTeam(x))] }) : h('p', { class: 'empty' }, 'No teams yet. Add your first team.'),
     publishNote());
 }
 
@@ -108,10 +110,9 @@ async function peopleList(ctx) {
   if (err) return shell(TITLE, tabs('people'), h('div', { class: 'flash error' }, friendly(err)));
   const teamName = new Map(t.data.map((x) => [x.id, x.name]));
 
-  const row = (person) => {
+  const removePerson = (person) => {
     const mine = m.data.filter((x) => x.person_id === person.id);
-    const current = mine.filter((x) => !x.end_date).map((x) => `${x.role}, ${teamName.get(x.team_id) || 'a removed team'}`);
-    const del = confirmButton('Delete', async () => {
+    return async () => {
       if (mine.length) {
         setFlash('error', `${person.full_name} has ${plural(mine.length, 'membership record', 'membership records')}. End or remove them on the team page first. To hide the person, untick "Show on public website" instead.`);
         return peopleList(ctx);
@@ -119,16 +120,19 @@ async function peopleList(ctx) {
       const { error } = await sb.from('people').delete().eq('id', person.id);
       setFlash(error ? 'error' : 'ok', error ? friendly(error) : 'Person deleted.');
       return peopleList(ctx);
-    });
-    return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, h('strong', {}, person.full_name), visibility(person),
-        h('div', { class: 'hint' }, person.designation, current.length ? ` · ${current.join('; ')}` : ' · not in any team')),
-      h('div', { class: 'row-actions' }, h('a', { href: `#/team/p/${person.id}` }, 'Edit'), del));
+    };
   };
+  const teamsOf = (person) => m.data.filter((x) => x.person_id === person.id && !x.end_date)
+    .map((x) => `${x.role}, ${teamName.get(x.team_id) || 'a removed team'}`).join('; ') || 'not in any team';
 
-  shell(TITLE, tabs('people'),
-    h('div', { class: 'toolbar' }, h('a', { class: 'btn primary', href: '#/team/p/new' }, 'Add person')),
-    pe.data.length ? h('ul', { class: 'rows' }, pe.data.map(row)) : h('p', { class: 'empty' }, 'No people yet. Add the first person, or add one while adding a team member.'),
+  shell({ title: TITLE, eyebrow: 'Projects & team', action: { href: '#/team/p/new', label: 'Add person' } }, tabs('people'),
+    pe.data.length ? dataTable({ caption: 'People', rows: pe.data,
+      columns: [
+        { label: 'Name', primary: true, get: (x) => x.full_name },
+        { label: 'Designation', get: (x) => x.designation || '–' },
+        { label: 'Team and role', get: (x) => teamsOf(x) },
+        { label: 'Website', get: (x) => visibility(x) }],
+      actions: (x) => [iconLink(`#/team/p/${x.id}`, `Edit ${x.full_name}`), deleteButton(`Delete ${x.full_name}`, removePerson(x))] }) : h('p', { class: 'empty' }, 'No people yet. Add the first person, or add one while adding a team member.'),
     publishNote());
 }
 
