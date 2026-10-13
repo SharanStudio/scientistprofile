@@ -1,5 +1,5 @@
 import { STATES } from './states.js';
-import { IMPORT_SECTIONS, LAYOUT, TEMPLATE_VERSION, columnTitles, importFields, schemaHash, whenHint } from './import-schema.js';
+import { AREA_PREFIX, IMPORT_SECTIONS, LAYOUT, TEMPLATE_VERSION, columnTitles, importFields, schemaHash, whenHint } from './import-schema.js';
 import { loadExcelJS } from './exceljs-loader.js';
 
 // One example row per sheet. The reader ignores row 3, and a test checks that every example passes the same rules as real rows.
@@ -9,18 +9,26 @@ export const EXAMPLES = {
   training: { title: 'Workshop on surveillance data analysis', type: 'Workshop', level: 'National', start_date: '2024-06-10', end_date: '2024-06-12', participants: 30 },
   meeting: { kind: 'Committee meeting', start_date: '2024-04-02', committee: 'Library' },
   support: { kind: 'Programme support', programme: 'IDSP', level: 'State', states: ['Tamil Nadu', 'Kerala'], support_types: ['Capacity building', 'Secondary data analysis'], start_date: '2023-01-10' },
-  policy: { type: 'Expert in a government committee', title: 'Expert group on disease surveillance guidelines', level: 'National', impact: 'Contributed to revised surveillance reporting guidance.', start_date: '2024-05-20' },
   peer_review: { journal: 'Example Journal of Epidemiology', role: 'Reviewer', start_date: '2024-02-01' },
   publication: {
     kind: 'Research publication', citation: 'Author A, Author B. Example title of the article. Example J Epidemiol. 2024;12(3):45-52.',
     start_date: '2024-07-01', doi: '10.1000/example.2024.001', roles: ['First author', 'Corresponding author'], journal_level: 'International',
     type: 'Original article', in_pubmed: 'Yes', impact_factor: 3.2, link: 'https://doi.org/10.1000/example.2024.001',
-    summary: 'Example summary of up to fifty words.',
+    summary: 'Example summary of up to fifty words.', is_public: true, is_featured: false,
+  },
+  mentee: {
+    name: 'Example Officer', designation: 'Deputy Director', organisation: 'Example State Health Department', program: 'India EIS',
+    cohort: 'Cohort 1', email: 'example.officer@example.org', public_consent: true, is_public: false,
+  },
+  people: {
+    full_name: 'Example Person', designation: 'Research Associate', bio: 'Works on surveillance data analysis.',
+    photo_path: 'assets/people/example-person.jpg', photo_consent: true, orcid: '0000-0002-1825-0097',
+    linkedin_url: 'https://www.linkedin.com/in/example', public_email: 'example.person@example.org', is_public: false,
   },
 };
 
 const DATE_FMT = 'dd-mmm-yyyy';
-const WIDTH = { date: 14, text: 32, textarea: 52, select: 24, multicheck: 36, int: 14, num: 14, url: 34, orcid: 22, checkbox: 12 };
+const WIDTH = { date: 14, text: 32, textarea: 52, select: 24, multicheck: 36, int: 14, num: 14, url: 34, orcid: 22, checkbox: 18 };
 const NOTE_LIST_MAX = 12;
 
 const colLetter = (n) => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
@@ -36,6 +44,7 @@ function noteFor(f, hint) {
     lines.push('Separate several values with a semicolon (;).');
     lines.push(f.options.length <= NOTE_LIST_MAX ? `Allowed: ${f.options.join('; ')}.` : 'Use the exact names on the Lists sheet.');
   }
+  if (f.type === 'checkbox') lines.push('Choose Yes or No. A blank cell counts as No.');
   if (f.type === 'int') lines.push('A whole number.');
   if (f.type === 'num') lines.push('A number, for example 4.2.');
   if (f.words) lines.push(`${f.words} words or fewer.`);
@@ -46,6 +55,7 @@ function noteFor(f, hint) {
 function validationFor(f, listRange, cellRef) {
   const base = { allowBlank: true, showErrorMessage: true, errorStyle: 'stop' };
   if (f.type === 'select') return { ...base, type: 'list', formulae: [listRange], errorTitle: 'Pick from the list', error: 'Choose one of the values in the dropdown.' };
+  if (f.type === 'checkbox') return { ...base, type: 'list', formulae: ['"Yes,No"'], errorTitle: 'Yes or No', error: 'Choose Yes or No.' };
   // ExcelJS cannot write TODAY() into a date rule, so dates use a custom rule that Excel evaluates itself.
   // cellRef is the first cell of the range; Excel applies the formula relative to it.
   if (f.type === 'date') return { ...base, type: 'custom', formulae: [`AND(ISNUMBER(${cellRef}),${cellRef}>=DATE(1950,1,1),${cellRef}<=${f.noFuture ? 'TODAY()' : 'DATE(2099,12,31)'})`],
@@ -57,7 +67,7 @@ function validationFor(f, listRange, cellRef) {
 }
 
 // Builds the workbook. ExcelJS is passed in, so the same code runs in the browser and in tests.
-export function buildTemplate(ExcelJS) {
+export function buildTemplate(ExcelJS, lookups = {}) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Scientist Profile';
   wb.created = new Date();
@@ -73,7 +83,7 @@ export function buildTemplate(ExcelJS) {
   const headFont = { bold: true, color: { argb: 'FFFFFFFF' } };
   const headFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' } };
   for (const [key, name] of IMPORT_SECTIONS) {
-    for (const f of importFields(key)) {
+    for (const f of importFields(key, lookups)) {
       if (!f.options || listRange.has(JSON.stringify(f.options))) continue;
       listCol += 1;
       const L = colLetter(listCol);
@@ -88,14 +98,15 @@ export function buildTemplate(ExcelJS) {
   lists.views = [{ state: 'frozen', ySplit: 1 }];
 
   for (const [key, , ws] of sheets) {
-    const fields = importFields(key);
+    const fields = importFields(key, lookups);
     const titles = columnTitles(fields).map((c) => c.title);
     const example = EXAMPLES[key];
+    const firstArea = fields.find((f) => f.key.startsWith(AREA_PREFIX));
 
     ws.columns = fields.map((f) => ({
       key: f.key, width: WIDTH[f.type] || 24,
       style: {
-        numFmt: f.type === 'date' ? DATE_FMT : f.type === 'int' ? '0' : f.type === 'num' ? '0.0#' : ['text', 'textarea', 'url', 'select', 'multicheck'].includes(f.type) ? '@' : 'General',
+        numFmt: f.type === 'date' ? DATE_FMT : f.type === 'int' ? '0' : f.type === 'num' ? '0.0#' : ['text', 'textarea', 'url', 'select', 'multicheck', 'checkbox', 'orcid'].includes(f.type) ? '@' : 'General',
         alignment: { vertical: 'top', wrapText: f.type === 'textarea' || f.type === 'text' },
       },
     }));
@@ -110,16 +121,17 @@ export function buildTemplate(ExcelJS) {
       hc.alignment = { vertical: 'middle', wrapText: true };
       const note = noteFor(f, whenHint(fields, f));
       if (note) hc.note = note;
-      const v = example[f.key];
+      const v = f.key.startsWith(AREA_PREFIX) ? f === firstArea : example[f.key];
       const ec = exRow.getCell(i + 1);
-      if (v !== undefined && v !== null) {
+      if (f.type === 'checkbox') ec.value = v ? 'Yes' : 'No';
+      else if (v !== undefined && v !== null) {
         ec.value = f.type === 'date' ? isoToDate(v) : Array.isArray(v) ? v.join('; ') : v;
       }
       ec.font = { italic: true, color: { argb: 'FF808080' } };
       ec.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
     });
     keyRow.hidden = true;
-    headRow.height = 38;
+    headRow.height = 52;
     exRow.getCell(1).note = 'Example row. It is ignored on upload. Type your records from row 4 down.';
 
     const first = LAYOUT.firstDataRow;
@@ -151,10 +163,15 @@ export function buildTemplate(ExcelJS) {
     ['', ''],
     ['Good to know', 'head'],
     ['Peer review and Publication rows dated before your joining date are tagged "before joining" automatically.', ''],
+    ['Yes/No columns (website, consent, research areas) take Yes or No from the dropdown. A blank cell counts as No, so nothing becomes public unless you say Yes.', ''],
+    ['Publication: give Yes for at least one research area. Research publications need a DOI and a link. Feature on home page counts only when Show on public website is Yes.', ''],
+    ['Mentee: Show on public website needs "Mentee agreed to be named" = Yes.', ''],
+    ['People: only an admin account can import this sheet. Add team membership in the app afterwards. The photo path is a path inside the website assets folder.', ''],
+    ['Policy, Achievements, Projects, Teams and One-page summaries are not in this workbook. Enter them in the app.', ''],
     ['A row that matches an entry you already saved is skipped, so uploading a corrected file again is safe.', ''],
     ['The app reports every error before it saves anything. Nothing is saved until every row passes.', ''],
     ['', ''],
-    [`Template ${TEMPLATE_VERSION}, schema ${schemaHash()}`, 'small'],
+    [`Template ${TEMPLATE_VERSION}, schema ${schemaHash(lookups)}`, 'small'],
   ];
   lines.forEach(([text, kind], i) => {
     const c = readme.getCell(`A${i + 1}`);
@@ -166,14 +183,17 @@ export function buildTemplate(ExcelJS) {
   });
 
   meta.getCell('A1').value = 'template'; meta.getCell('B1').value = TEMPLATE_VERSION;
-  meta.getCell('A2').value = 'schema'; meta.getCell('B2').value = schemaHash();
+  meta.getCell('A2').value = 'schema'; meta.getCell('B2').value = schemaHash(lookups);
   meta.getCell('A3').value = 'generated'; meta.getCell('B3').value = new Date().toISOString();
   return wb;
 }
 
 export async function downloadTemplate() {
   const ExcelJS = await loadExcelJS();
-  const buffer = await buildTemplate(ExcelJS).xlsx.writeBuffer();
+  const { loadLookups } = await import('./lookups.js');   // research areas and mentee programmes come from the database
+  const lookups = await loadLookups();
+  if (lookups.failed) throw new Error('Could not read the research-area and programme lists from the database. Check your connection and try again.');
+  const buffer = await buildTemplate(ExcelJS, lookups).xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

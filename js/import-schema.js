@@ -1,26 +1,88 @@
-import { SECTIONS } from './sections.js';
+import { SECTIONS, SITE_PUBLIC, SITE_FEATURED, SITE_AREAS } from './sections.js';
+import { personFields } from './team-data.js';
 
 // What the Excel upload covers, and what each sheet is called.
 // The sheet name is how the importer finds a section, so these names must stay stable.
+// Policy, Achievements, Projects, Teams and One-page summaries are not here: they are entered in the app.
+export const PEOPLE = 'people';
 export const IMPORT_SECTIONS = [
   ['teaching', 'Teaching'],
   ['field_visit', 'Field visit'],
   ['training', 'Training'],
   ['meeting', 'Meeting'],
   ['support', 'Programme support'],
-  ['policy', 'Policy'],
   ['peer_review', 'Peer review'],
   ['publication', 'Publication'],
+  ['mentee', 'Mentee'],
+  [PEOPLE, 'People'],
 ];
+
+// Each research area becomes one Yes/No column on the Publication sheet. The column id is this prefix plus the area slug.
+export const AREA_PREFIX = 'area__';
+
+// People live in their own table, not in `entries`, so they get their own small definition.
+// Its rules read a flat row (the shape of a people table row), where entries sections read row.data.
+export const PEOPLE_DEF = {
+  label: 'People',
+  summary: (r) => [r.full_name, r.designation].filter(Boolean).join(', '),
+  dupKey: (r) => [(r.full_name || '').toLowerCase().trim(), (r.designation || '').toLowerCase().trim()].join('|'),
+};
+export const defOf = (key) => (key === PEOPLE ? PEOPLE_DEF : SECTIONS[key]);
 
 // Older records often lack some details, so the upload relaxes these fields. The entry forms stay as they are.
 const RELAXED = { publication: ['summary'] };
 
+// Short column titles and notes for the Yes/No columns, which have long labels on the entry forms.
+const SHORT_LABEL = {
+  is_public: 'Show on public website', is_featured: 'Feature on home page',
+  public_consent: 'Mentee agreed to be named', photo_consent: 'Photo consent',
+};
+const YESNO_HELP = {
+  is_public: 'Yes puts the record on the public website. Blank counts as No.',
+  is_featured: 'Yes features it on the home page. It counts only when "Show on public website" is Yes. Blank counts as No.',
+  public_consent: 'Yes only if the mentee agreed to be named on the website. Blank counts as No.',
+  photo_consent: 'Yes only if the person agreed to show their photo. It applies only when a photo path is given. Blank counts as No.',
+};
+
+const resolveList = (f, lookups) => {
+  const list = f.optionsFrom && lookups[f.optionsFrom];
+  return list && list.length ? { ...f, options: list } : f;
+};
+
+// The research areas the upload offers: the database list when it is known, otherwise the built-in five.
+const areaList = (lookups) => (lookups.research_areas && lookups.research_areas.length ? lookups.research_areas : SITE_AREAS.options);
+
+function areaFields(lookups) {
+  const areas = areaList(lookups);
+  const keys = areas.map((a) => AREA_PREFIX + a.value);
+  return areas.map((a, i) => ({
+    key: AREA_PREFIX + a.value, slug: a.value, type: 'checkbox', label: `Area: ${a.label}`,
+    help: 'Yes for each research area that applies. At least one area must be Yes. Blank counts as No.',
+    check: i === 0 ? (_val, vals) => (keys.some((k) => vals[k] === true) ? '' : 'Enter Yes for at least one research area.') : undefined,
+  }));
+}
+
+// Website columns that sit after a sheet's normal columns. They are table columns or data fields on the entry forms too.
+function websiteFields(key, lookups) {
+  if (key === 'publication') return [...areaFields(lookups), SITE_PUBLIC, SITE_FEATURED];
+  if (key === 'mentee') {
+    return [{ ...SITE_PUBLIC,
+      check: (val, vals) => (val && !vals.public_consent ? 'Show on public website needs "Mentee agreed to be named" = Yes.' : '') }];
+  }
+  return [];
+}
+
 // The fields one sheet carries, in column order. The before-joining tick is never a column:
-// the importer works it out from the date.
-export function importFields(key) {
+// the importer works it out from the date. `lookups` holds the database lists (research areas, mentee programmes).
+export function importFields(key, lookups = {}) {
   const relaxed = RELAXED[key] || [];
-  return SECTIONS[key].fields.map((f) => (relaxed.includes(f.key) ? { ...f, required: false } : f));
+  const base = key === PEOPLE ? personFields().filter((f) => f.key !== 'sort_order') : SECTIONS[key].fields;
+  return [...base, ...websiteFields(key, lookups)].map((f) => {
+    let out = relaxed.includes(f.key) ? { ...f, required: false } : f;
+    out = resolveList(out, lookups);
+    if (out.type === 'checkbox') out = { ...out, label: SHORT_LABEL[out.key] || out.label, help: YESNO_HELP[out.key] || out.help };
+    return out;
+  });
 }
 
 // Plain-words condition for a field that only applies to some rows, such as
@@ -72,8 +134,8 @@ export function columnTitles(fields) {
 
 // A short fingerprint of every sheet, column, type, requirement and dropdown value.
 // It goes into the template, and the importer compares it, so an out-of-date template is caught.
-export function schemaHash() {
-  const spec = IMPORT_SECTIONS.map(([key, sheet]) => [sheet, importFields(key).map((f) => [
+export function schemaHash(lookups = {}) {
+  const spec = IMPORT_SECTIONS.map(([key, sheet]) => [sheet, importFields(key, lookups).map((f) => [
     f.key, f.type, !!f.required, !!f.requiredIf, f.options || null, f.words || null, f.min ?? null,
   ])]);
   const s = JSON.stringify(spec);
@@ -82,7 +144,7 @@ export function schemaHash() {
   return hash.toString(16).padStart(8, '0');
 }
 
-export const TEMPLATE_VERSION = 'sp-import-1';
+export const TEMPLATE_VERSION = 'sp-import-2';
 
 // Fixed layout of every data sheet. Row 1 (hidden) holds the column ids, row 2 the headers,
 // row 3 a grey example that is ignored, and the records start in row 4.
