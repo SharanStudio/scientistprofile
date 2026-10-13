@@ -46,10 +46,11 @@ async function saveAll(sb, res) {
   for (const s of res.sheets) for (const r of s.rows) {
     if (r.status !== 'new') continue;
     if (s.key === PEOPLE) people.push(r.row);
-    else rows.push({ ...r.row, data: { ...r.row.data, _import: id } });
+    // Every row names both website flags. A bulk insert sends null for a key some rows lack, and the table refuses null.
+    else rows.push({ ...r.row, is_public: !!r.row.is_public, is_featured: !!r.row.is_featured, data: { ...r.row.data, _import: id } });
   }
   if (rows.length) {
-    const { error } = await sb.from('entries').insert(rows);
+    const { error } = await sb.from('entries').insert(rows, { defaultToNull: false });
     if (error) throw error;
   }
   if (people.length) {
@@ -62,7 +63,7 @@ async function saveAll(sb, res) {
         taken.add(slug);
         return { ...p, slug, import_id: id };
       });
-      const { error } = await sb.from('people').insert(out);
+      const { error } = await sb.from('people').insert(out, { defaultToNull: false });
       if (error) throw error;
     } catch (e) {
       if (rows.length) await sb.from('entries').delete().eq('data->>_import', id);
