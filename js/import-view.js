@@ -1,11 +1,13 @@
 import { h } from './dom.js';
-import { IMPORT_SECTIONS } from './import-schema.js';
+import { IMPORT_SECTIONS, PEOPLE } from './import-schema.js';
+import { loadLookups } from './lookups.js';
+import { slugify, uniqueSlug } from './team-data.js';
 import { MAX_FILE_BYTES } from './import-read.js';
 import { loadExcelJS } from './exceljs-loader.js';
 
 // The Upload page. The file is read in this browser tab only. It is never sent anywhere or stored.
 const SHOW_LIMIT = 200;   // longest error list drawn on screen
-const keys = IMPORT_SECTIONS.map((s) => s[0]);
+const keys = IMPORT_SECTIONS.map((s) => s[0]).filter((k) => k !== PEOPLE);   // sections stored in `entries`
 
 // The user's existing records, needed to spot "already exists". Read page by page.
 async function loadExisting(sb) {
@@ -20,39 +22,108 @@ async function loadExisting(sb) {
   return out;
 }
 
-// Every record from one upload carries the same import ID in data._import, so one click can undo the batch.
+// People already saved, to spot repeats. Read page by page.
+async function loadExistingPeople(sb) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('people').select('full_name,designation').order('id').range(from, from + 999);
+    if (error) throw error;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+// Every record from one upload carries the same import ID (data._import on entries, import_id on people), so one click can undo the batch.
 const newImportId = () => 'imp_' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 
-// One insert call is one database transaction: either every record is saved or none is.
+// Entries go in with one insert (one transaction: all or none). People go in with a second insert.
+// If the people insert fails, the entries just saved are removed again, so a failed import leaves nothing behind.
 async function saveAll(sb, res) {
   const id = newImportId();
   const rows = [];
-  for (const s of res.sheets) for (const r of s.rows) if (r.status === 'new') rows.push({ ...r.row, data: { ...r.row.data, _import: id } });
-  const { error } = await sb.from('entries').insert(rows);
-  if (error) throw error;
-  return { id, count: rows.length };
+  const people = [];
+  for (const s of res.sheets) for (const r of s.rows) {
+    if (r.status !== 'new') continue;
+    if (s.key === PEOPLE) people.push(r.row);
+    else rows.push({ ...r.row, data: { ...r.row.data, _import: id } });
+  }
+  if (rows.length) {
+    const { error } = await sb.from('entries').insert(rows);
+    if (error) throw error;
+  }
+  if (people.length) {
+    try {
+      const { data: have, error: e0 } = await sb.from('people').select('slug');
+      if (e0) throw e0;
+      const taken = new Set(have.map((p) => p.slug));
+      const out = people.map((p) => {
+        const slug = uniqueSlug(slugify(p.full_name), taken);
+        taken.add(slug);
+        return { ...p, slug, import_id: id };
+      });
+      const { error } = await sb.from('people').insert(out);
+      if (error) throw error;
+    } catch (e) {
+      if (rows.length) await sb.from('entries').delete().eq('data->>_import', id);
+      throw e;
+    }
+  }
+  return { id, count: rows.length + people.length };
 }
 
-// The newest import still in the database, with how many records it holds.
+// The newest import still in the database, with how many records it holds (entries and people together).
 async function findLastImport(sb) {
-  const { data, error } = await sb.from('entries').select('created_at,data')
-    .not('data->>_import', 'is', null).order('created_at', { ascending: false }).limit(1);
-  if (error) throw error;
-  if (!data.length) return null;
-  const id = data[0].data._import;
-  const { count, error: e2 } = await sb.from('entries').select('id', { count: 'exact', head: true }).eq('data->>_import', id);
-  if (e2) throw e2;
-  return { id, at: data[0].created_at, count };
+  const [a, b] = await Promise.all([
+    sb.from('entries').select('created_at,data').not('data->>_import', 'is', null).order('created_at', { ascending: false }).limit(1),
+    sb.from('people').select('created_at,import_id').not('import_id', 'is', null).order('created_at', { ascending: false }).limit(1),
+  ]);
+  if (a.error) throw a.error;
+  if (b.error) throw b.error;
+  const cands = [];
+  if (a.data.length) cands.push({ id: a.data[0].data._import, at: a.data[0].created_at });
+  if (b.data.length) cands.push({ id: b.data[0].import_id, at: b.data[0].created_at });
+  if (!cands.length) return null;
+  const last = cands.sort((x, y) => (x.at < y.at ? 1 : -1))[0];
+  const [c1, c2] = await Promise.all([
+    sb.from('entries').select('id', { count: 'exact', head: true }).eq('data->>_import', last.id),
+    sb.from('people').select('id', { count: 'exact', head: true }).eq('import_id', last.id),
+  ]);
+  if (c1.error) throw c1.error;
+  if (c2.error) throw c2.error;
+  return { id: last.id, at: last.at, count: (c1.count || 0) + (c2.count || 0) };
 }
 
 // Removes every record that carries this import ID. Records edited by hand after the import lose the ID, so they stay.
+// A person who now belongs to a team, or leads one, stays too, because deleting them would break the team.
 async function undoImport(sb, id) {
   const { data, error } = await sb.from('entries').delete().eq('data->>_import', id).select('id');
   if (error) throw error;
-  return data.length;
+  const { data: ppl, error: e2 } = await sb.from('people').select('id').eq('import_id', id);
+  if (e2) throw e2;
+  let removed = data.length;
+  let kept = 0;
+  if (ppl.length) {
+    const ids = ppl.map((p) => p.id);
+    const [m, t] = await Promise.all([
+      sb.from('team_memberships').select('person_id').in('person_id', ids),
+      sb.from('teams').select('lead_person_id').in('lead_person_id', ids),
+    ]);
+    if (m.error) throw m.error;
+    if (t.error) throw t.error;
+    const used = new Set([...m.data.map((x) => x.person_id), ...t.data.map((x) => x.lead_person_id)]);
+    const free = ids.filter((x) => !used.has(x));
+    kept = ids.length - free.length;
+    if (free.length) {
+      const { data: gone, error: e3 } = await sb.from('people').delete().in('id', free).select('id');
+      if (e3) throw e3;
+      removed += gone.length;
+    }
+  }
+  return { removed, kept };
 }
 
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const plural = (n, w, many) => `${n} ${n === 1 ? w : (many || `${w}s`)}`;
 
 function totalsTable(res) {
   const head = h('tr', {}, ['Sheet', 'Rows', 'New', 'Exist', 'Repeat', 'Error'].map((t) => h('th', { scope: 'col' }, t)));
@@ -92,7 +163,7 @@ function previewNew(res) {
     const rows = s.rows.filter((r) => r.status === 'new');
     return h('details', {}, h('summary', {}, `${s.label}: ${plural(rows.length, 'new record')}`),
       h('ul', { class: 'errlist' }, rows.slice(0, SHOW_LIMIT).map((r) => h('li', {},
-        `Row ${r.rowNumber} · ${r.row.start_date}${r.summary ? ` · ${r.summary}` : ''} `,
+        `Row ${r.rowNumber}${r.row.start_date ? ` · ${r.row.start_date}` : ''}${r.summary ? ` · ${r.summary}` : ''} `,
         r.row.before_joining ? h('span', { class: 'tag' }, 'Before joining') : null))));
   });
   if (!blocks.length) return null;
@@ -124,8 +195,13 @@ export async function viewImport(ctx) {
       if (file.size > MAX_FILE_BYTES) throw new Error(`This file is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${MAX_FILE_BYTES / 1048576} MB.`);
       const [ExcelJS, mod] = await Promise.all([loadExcelJS(), import('./import-read.js')]);
       const buffer = await file.arrayBuffer();
-      const existing = await loadExisting(sb);
-      const res = await mod.analyseFile(ExcelJS, buffer, { joining: state.profile && state.profile.joining_date, existing });
+      const lookups = await loadLookups();
+      if (lookups.failed) throw new Error('Could not read the research-area and programme lists from the database. Check your connection and try again.');
+      const [existing, existingPeople] = await Promise.all([loadExisting(sb), loadExistingPeople(sb)]);
+      const res = await mod.analyseFile(ExcelJS, buffer, {
+        joining: state.profile && state.profile.joining_date, existing, existingPeople, lookups,
+        canImportPeople: !!state.profile && state.profile.role === 'admin',
+      });
       out.replaceChildren(...show(res, file.name).filter(Boolean));
     } catch (e) {
       out.replaceChildren(h('div', { class: 'flash error', role: 'alert' }, friendly(e)));
@@ -185,10 +261,10 @@ export async function viewImport(ctx) {
       sure.addEventListener('click', async () => {
         sure.disabled = true; sure.textContent = 'Deleting…';
         try {
-          const n = await undoImport(sb, last.id);
+          const done = await undoImport(sb, last.id);
           out.replaceChildren();
           await refreshLast();
-          lastBox.prepend(h('div', { class: 'flash ok', role: 'status' }, `Undone: ${plural(n, 'record')} deleted.`));
+          lastBox.prepend(h('div', { class: 'flash ok', role: 'status' }, `Undone: ${plural(done.removed, 'record')} deleted.${done.kept ? ` ${plural(done.kept, 'person', 'people')} stayed because they now belong to a team.` : ''}`));
         } catch (e) {
           sure.disabled = false; sure.textContent = `Yes, delete ${plural(last.count, 'record')}`;
           msg.replaceChildren(h('div', { class: 'flash error' }, `Nothing was deleted. ${friendly(e)}`));

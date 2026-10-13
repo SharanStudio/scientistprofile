@@ -1,6 +1,6 @@
-import { SECTIONS } from './sections.js';
-import { IMPORT_SECTIONS, LAYOUT, TEMPLATE_VERSION, columnTitles, importFields, schemaHash } from './import-schema.js';
+import { IMPORT_SECTIONS, LAYOUT, PEOPLE, AREA_PREFIX, TEMPLATE_VERSION, columnTitles, defOf, importFields, schemaHash } from './import-schema.js';
 import { buildRow, cleanValues, isVisible, validateValues } from './rules.js';
+import { toPersonRow } from './team-data.js';
 
 // Reads a filled upload workbook and checks every row with the same rules the entry forms use.
 // Nothing here touches the page or the database, so the whole path can be tested on its own.
@@ -89,6 +89,14 @@ function matchOption(value, options) {
 
 // Returns { value } (null when empty) or { error }. The rules in rules.js then judge the value itself.
 export function convertCell(f, c) {
+  if (f.type === 'checkbox') {   // a Yes/No column; a blank cell counts as No
+    if (c === null) return { value: false };
+    if (c && c.error) return { error: `The cell holds an error value (${c.error}). Replace it with Yes or No.` };
+    const t = norm(typeof c === 'string' ? c : String(c));
+    if (['yes', 'y', 'true', '1'].includes(t)) return { value: true };
+    if (['no', 'n', 'false', '0'].includes(t)) return { value: false };
+    return { error: `"${c}" is not Yes or No. Pick Yes or No from the dropdown, or leave the cell blank for No.` };
+  }
   if (c === null) return { value: null };
   if (c && c.error) return { error: `The cell holds an error value (${c.error}). Replace it with the right entry.` };
   switch (f.type) {
@@ -142,18 +150,18 @@ export async function loadWorkbook(ExcelJS, buffer) {
 }
 
 // Finds the sheets and column ids. Problems stop the read; nothing is guessed.
-export function readSheets(wb) {
+export function readSheets(wb, lookups = {}) {
   const problems = [];
   const meta = wb.getWorksheet('_meta');
   if (!meta) return { fatal: true, problems: ['This workbook does not look like the Scientist Profile template. Download the template with the Template link and fill that file.'], sheets: [] };
-  if (plainCell(meta.getCell('B1').value) !== TEMPLATE_VERSION || plainCell(meta.getCell('B2').value) !== schemaHash()) {
+  if (plainCell(meta.getCell('B1').value) !== TEMPLATE_VERSION || plainCell(meta.getCell('B2').value) !== schemaHash(lookups)) {
     return { fatal: true, problems: ['This workbook comes from an older or different version of the template. Download a fresh template with the Template link and copy your rows into it.'], sheets: [] };
   }
   const sheets = [];
   for (const [key, name] of IMPORT_SECTIONS) {
     const ws = wb.getWorksheet(name);
     if (!ws) { problems.push(`The sheet "${name}" is missing. Do not delete or rename sheets.`); continue; }
-    const fields = importFields(key);
+    const fields = importFields(key, lookups);
     const col = {};
     for (let i = 1; i <= ws.columnCount; i++) {
       const id = plainCell(ws.getRow(LAYOUT.keyRow).getCell(i).value);
@@ -184,19 +192,21 @@ export function readSheets(wb) {
 
 // parsed: output of readSheets. ctx.joining: joining date (YYYY-MM-DD) or null.
 // ctx.existing: the signed-in user's saved entries [{ section, start_date, data }], used to spot repeats.
+// ctx.existingPeople: saved people rows [{ full_name, designation }]. ctx.canImportPeople: false blocks the People sheet (admin only).
 export function checkSheets(parsed, ctx = {}) {
-  const { joining = null, existing = [] } = ctx;
+  const { joining = null, existing = [], existingPeople = [], canImportPeople = true } = ctx;
   const have = {};
   for (const e of existing) {
-    const sec = SECTIONS[e.section];
+    const sec = defOf(e.section);
     if (sec && sec.dupKey) (have[e.section] ||= new Set()).add(sec.dupKey(e));
   }
+  for (const p of existingPeople) (have[PEOPLE] ||= new Set()).add(defOf(PEOPLE).dupKey(p));
   const notes = [];
   let noJoining = false;
   const out = [];
 
   for (const sh of parsed.sheets) {
-    const sec = SECTIONS[sh.key];
+    const sec = defOf(sh.key);
     const titles = columnTitles(sh.fields);
     const label = Object.fromEntries(titles.map((t) => [t.key, t.label]));
     const seen = new Map();
@@ -217,9 +227,10 @@ export function checkSheets(parsed, ctx = {}) {
         if (msg) errors.push({ key: f.key, column: label[f.key], message: msg });
       }
       const warnings = sh.fields
-        .filter((f) => !conv[f.key] && raw[f.key] !== null && !isVisible(f, raw))
+        .filter((f) => !conv[f.key] && raw[f.key] !== null && raw[f.key] !== false && !isVisible(f, raw))
         .map((f) => ({ key: f.key, column: label[f.key], message: 'Ignored, because it does not apply to this row.' }));
 
+      if (sh.key === PEOPLE && !canImportPeople) errors.push({ key: 'full_name', column: label.full_name, message: 'Only an admin account can import people. Remove this sheet\'s rows or sign in as an admin.' });
       const res = { rowNumber: r.rowNumber, status: 'new', errors, warnings, row: null, summary: '', of: null };
       if (errors.length) { res.status = 'error'; counts.error++; rows.push(res); continue; }
 
@@ -229,7 +240,13 @@ export function checkSheets(parsed, ctx = {}) {
         if (!joining) noJoining = true;
         else beforeJoining = !!values.start_date && values.start_date < joining;
       }
-      res.row = buildRow(sh.key, sec, { ...values, before_joining: beforeJoining });
+      // The Yes/No area columns collapse into the research_areas list the entry form saves (a list of area slugs).
+      const areaCols = sh.fields.filter((f) => f.key.startsWith(AREA_PREFIX));
+      if (areaCols.length) {
+        values.research_areas = areaCols.filter((f) => values[f.key]).map((f) => f.slug);
+        for (const f of areaCols) delete values[f.key];
+      }
+      res.row = sh.key === PEOPLE ? toPersonRow(values) : buildRow(sh.key, sec, { ...values, before_joining: beforeJoining });
       try { res.summary = sec.summary(res.row); } catch (e) { res.summary = ''; }
 
       const k = sec.dupKey ? sec.dupKey(res.row) : null;
@@ -253,5 +270,5 @@ export function checkSheets(parsed, ctx = {}) {
 // The whole read-and-check in one call.
 export async function analyseFile(ExcelJS, buffer, ctx) {
   const wb = await loadWorkbook(ExcelJS, buffer);
-  return checkSheets(readSheets(wb), ctx);
+  return checkSheets(readSheets(wb, ctx && ctx.lookups), ctx);
 }

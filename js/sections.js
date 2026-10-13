@@ -21,12 +21,12 @@ const RESEARCH_AREA_FALLBACK = [
   { value: 'digital-health', label: 'Digital Health' },
   { value: 'field-epidemiology', label: 'Field Epidemiology' },
 ];
-const SITE_PUBLIC = { key: 'is_public', type: 'checkbox', label: 'Show on my public website',
+export const SITE_PUBLIC = { key: 'is_public', type: 'checkbox', label: 'Show on my public website',
   help: 'Off by default. Nothing appears on the website until you tick this.' };
-const SITE_FEATURED = { key: 'is_featured', type: 'checkbox', label: 'Feature on the home page', showIf: (v) => !!v.is_public };
+export const SITE_FEATURED = { key: 'is_featured', type: 'checkbox', label: 'Feature on the home page', showIf: (v) => !!v.is_public };
 const SITE_SUMMARY = { key: 'site_summary', type: 'textarea', label: 'Short description for the website', words: 40, rows: 2,
   help: 'Optional. One or two plain sentences, 40 words or fewer. Shown on the project card.' };
-const SITE_AREAS = { key: 'research_areas', type: 'multicheck', label: 'Research areas', optionsFrom: 'research_areas',
+export const SITE_AREAS = { key: 'research_areas', type: 'multicheck', label: 'Research areas', optionsFrom: 'research_areas',
   options: RESEARCH_AREA_FALLBACK, help: 'Tick all that apply. The website uses these to group the work.' };
 const SITE_TEAM = { key: 'team_id', type: 'select', label: 'Team', optionsFrom: 'teams',
   help: 'The one team that owns this work. Teams are managed in Supabase.' };
@@ -106,12 +106,12 @@ export const SECTIONS = {
     fields: [
       { key: 'title', type: 'text', label: 'Title', required: true, max: 250 },
       { key: 'type', type: 'select', label: 'Type', required: true, options: ['Seminar', 'Conference', 'Meeting', 'Workshop', 'Training'] },
-      { key: 'level', type: 'select', label: 'Level', required: true, options: ['National', 'International'] },
+      { key: 'level', type: 'select', label: 'Level', required: true, options: ['National', 'Regional', 'International'] },
       { key: 'start_date', col: true, type: 'date', label: 'Start date', required: true, noFuture: true },
       { key: 'end_date', col: true, type: 'date', label: 'End date', help: 'Leave blank for a single-day event.', noFuture: true },
       { key: 'participants', type: 'int', label: 'Number of participants', required: true, min: 1 },
     ],
-    siteFields: [SITE_PUBLIC],
+    // No website fields: trainings stay off the public site. They appear only in the Word profile.
     summary: (e) => `${e.data.title} (${e.data.type}, ${e.data.level}), ${rangeText(e)}, ${e.data.participants} participants`,
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
@@ -199,7 +199,10 @@ export const SECTIONS = {
       { key: 'impact', type: 'textarea', label: 'Details of research, policy, or practice impact', required: true, max: 600, rows: 4 },
       { key: 'start_date', col: true, type: 'date', label: 'Date', required: true, noFuture: true },
     ],
-    siteFields: [SITE_PUBLIC, SITE_FEATURED],
+    siteFields: [
+      { ...SITE_PUBLIC, help: 'Off by default. Shown on: the Recognitions page of the website.' },
+      { ...SITE_FEATURED, help: 'Also shown on: the home page, under Awards, fellowships and policy work.' },
+    ],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.title} (${e.data.type}, ${e.data.level})`,
     dupKey: (e) => [e.start_date, (e.data.title || '').toLowerCase()].join('|'),
   },
@@ -231,7 +234,7 @@ export const SECTIONS = {
       { key: 'nr_type', type: 'select', label: 'Type', required: true, options: ['Book chapter', 'Guideline', 'Monograph', 'Newsletter', 'Report', 'Other'],
         showIf: (v) => v.kind === 'Non-research publication' },
       // Research
-      { key: 'doi', type: 'text', label: 'DOI', max: 200, showIf: (v) => v.kind === 'Research publication',
+      { key: 'doi', type: 'text', label: 'DOI', required: true, max: 200, showIf: (v) => v.kind === 'Research publication',
         pattern: /^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)?10\.\d{4,9}\/\S+$/i, patternMsg: 'A DOI looks like 10.1016/j.example.2025.01.001',
         norm: (x) => x.replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, '') },
       { key: 'pubid', type: 'text', label: 'PMID or PMCID', max: 20, showIf: (v) => v.kind === 'Research publication',
@@ -247,7 +250,7 @@ export const SECTIONS = {
       { key: 'in_pubmed', type: 'select', label: 'Available in PubMed', required: true, options: ['Yes', 'No'],
         showIf: (v) => v.kind === 'Research publication' },
       { key: 'impact_factor', type: 'num', label: 'Impact factor', maxNum: 300, showIf: (v) => v.kind === 'Research publication' },
-      { key: 'link', type: 'url', label: 'Publication link', showIf: (v) => v.kind === 'Research publication' },
+      { key: 'link', type: 'url', label: 'Publication link', required: true, showIf: (v) => v.kind === 'Research publication' },
       { key: 'summary', type: 'textarea', label: 'Summary', required: true, words: 50, rows: 4,
         help: 'Paste your own summary, 50 words or fewer.', showIf: (v) => v.kind === 'Research publication' },
     ],
@@ -333,7 +336,10 @@ export const SECTIONS = {
         pattern: /^(?![/.])(?!.*\.\.)[\w\-./]+\.(?:pdf|png|jpe?g|webp)$/i,
         patternMsg: 'Use a relative path ending in .pdf, .png, .jpg or .webp, for example assets/certificates/cdc-2025.pdf' },
     ],
-    siteFields: [SITE_PUBLIC, SITE_FEATURED],
+    siteFields: [
+      { ...SITE_PUBLIC, help: 'Off by default. Shown on: the Recognitions page of the website.' },
+      { ...SITE_FEATURED, help: 'Also shown on: the home page, under Awards, fellowships and policy work.' },
+    ],
     summary: (e) => `${fmtDate(e.start_date)}: ${e.data.name} (${e.data.level || e.data.category})`,
     dupKey: (e) => [e.start_date, (e.data.name || '').toLowerCase()].join('|'),
   },
