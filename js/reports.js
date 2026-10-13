@@ -1,3 +1,4 @@
+import { dataTable, iconLink, deleteButton } from './ui.js';
 import { h, today } from './dom.js';
 import { buildModel, readiness, windows, fmtDate } from './profile-data.js';
 import { buildProfileDocx } from './docx-fill.js';
@@ -46,29 +47,20 @@ export async function viewReports(ctx) {
   loadingShell('Reports');
   const { data, error } = await sb.from('reports').select('id,title,created_at,updated_at,docx_path,items').order('created_at', { ascending: false });
   if (error) return shell('Reports', h('div', { class: 'flash error' }, friendly(error)));
-  const rows = data.map((r) => {
-    const del = h('button', { class: 'link danger' }, 'Delete');
-    let armed = null;
-    del.addEventListener('click', async () => {
-      if (!armed) {
-        del.textContent = 'Tap again to confirm';
-        armed = setTimeout(() => { armed = null; del.textContent = 'Delete'; }, 4000);
-        return;
-      }
-      clearTimeout(armed);
-      const { error: er } = await sb.from('reports').delete().eq('id', r.id);
-      ctx.setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Report deleted.');
-      viewReports(ctx);
-    });
-    const n = Array.isArray(r.items) ? r.items.length : 0;
-    return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, r.title, h('div', { class: 'sub' }, `Saved ${dateOnly(r.created_at)} · ${n} ${n === 1 ? 'summary' : 'summaries'}`)),
-      h('div', { class: 'row-actions' }, h('a', { href: `#/report/${r.id}` }, 'Open'), del));
-  });
-  shell('Reports',
-    h('p', { class: 'lede' }, 'Saved reports stay here until you delete one yourself. Nothing is removed automatically.'),
-    h('div', { class: 'toolbar' }, h('a', { class: 'btn primary', href: '#/report/new' }, 'Build a report')),
-    rows.length ? h('ul', { class: 'rows' }, rows) : h('p', { class: 'empty' }, 'No saved reports yet.'));
+  const remove = async (r) => {
+    const { error: er } = await sb.from('reports').delete().eq('id', r.id);
+    ctx.setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Report deleted.');
+    viewReports(ctx);
+  };
+  const count = (r) => (Array.isArray(r.items) ? r.items.length : 0);
+  shell({ title: 'Reports', eyebrow: 'Download', sub: 'Saved reports stay here until you delete one yourself. Nothing is removed automatically.', action: { href: '#/report/new', label: 'Build a report' } },
+    data.length ? dataTable({ caption: 'Saved reports', rows: data,
+      columns: [
+        { label: 'Report', primary: true, get: (r) => r.title },
+        { label: 'Saved', cls: 'dt-date', get: (r) => dateOnly(r.created_at) },
+        { label: 'Summaries', get: (r) => String(count(r)) }],
+      actions: (r) => [iconLink(`#/report/${r.id}`, `Open ${r.title}`, 'open'), deleteButton(`Delete ${r.title}`, () => remove(r))] })
+      : h('p', { class: 'empty' }, 'No saved reports yet.'));
 }
 
 /* ---------- report builder: choose and order summaries ---------- */

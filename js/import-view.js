@@ -191,7 +191,7 @@ export async function viewImport(ctx) {
     if (!file) return;
     out.replaceChildren(h('p', {}, 'Reading and checking your file…'));
     try {
-      if (!/\.xlsx$/i.test(file.name)) throw new Error('Choose an Excel file that ends in .xlsx. Use the Template link in the header to get the right one.');
+      if (!/\.xlsx$/i.test(file.name)) throw new Error('Choose an Excel file that ends in .xlsx. Use the Download template button on this page to get the right one.');
       if (file.size > MAX_FILE_BYTES) throw new Error(`This file is ${(file.size / 1048576).toFixed(1)} MB. The limit is ${MAX_FILE_BYTES / 1048576} MB.`);
       const [ExcelJS, mod] = await Promise.all([loadExcelJS(), import('./import-read.js')]);
       const buffer = await file.arrayBuffer();
@@ -278,8 +278,20 @@ export async function viewImport(ctx) {
   }
   refreshLast();
 
-  shell('Upload past records',
-    h('p', {}, 'Fill in the Excel template, then choose it here. The page checks every row and shows what would be added. The file is read in your browser and is not stored.'),
+  // The spreadsheet code loads only when the button is pressed, so it never slows the first page load.
+  const tplMsg = h('div', { role: 'status' });
+  const tpl = h('button', { type: 'button', class: 'secondary', title: 'Download the Excel workbook for uploading past records' }, 'Download template');
+  tpl.addEventListener('click', async () => {
+    tpl.disabled = true; tplMsg.replaceChildren();
+    try {
+      const { downloadTemplate } = await import('./import-template.js');
+      await downloadTemplate();
+    } catch (e) { tplMsg.replaceChildren(h('div', { class: 'flash error' }, `Could not build the template. ${friendly(e)}`)); }
+    finally { tpl.disabled = false; }
+  });
+
+  shell({ title: 'Bulk upload', eyebrow: 'Profile', sub: 'Fill in the Excel template, then choose it here. The page checks every row and shows what would be added. The file is read in your browser and is not stored.' },
+    h('div', { class: 'actions top-actions' }, tpl), tplMsg,
     lastBox,
     h('div', { class: 'field' }, h('label', { for: 'xl' }, 'Excel file (.xlsx, up to 5 MB)'), input), out);
 }

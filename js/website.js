@@ -52,10 +52,10 @@ export async function requestRebuild(sb) {
 }
 
 export async function viewWebsite({ sb, shell, loadingShell, friendly, setFlash, state }) {
-  if (!state.isOwner) return shell('Website', h('div', { class: 'flash warn' }, 'The website settings belong to the site owner.'));
-  loadingShell('Website');
+  if (!state.isOwner) return shell({ title: 'SM Website edit', eyebrow: 'Profile' }, h('div', { class: 'flash warn' }, 'The website settings belong to the site owner.'));
+  loadingShell('SM Website edit');
   const { data, error } = await sb.from('site_settings').select('*').limit(1).maybeSingle();
-  if (error || !data) return shell('Website', h('div', { class: 'flash error' }, error ? friendly(error) : 'No website settings found.'));
+  if (error || !data) return shell({ title: 'SM Website edit', eyebrow: 'Profile' }, h('div', { class: 'flash error' }, error ? friendly(error) : 'No website settings found.'));
   const initial = { ...data, focus_areas: (data.focus_areas || []).join('\n'), education: educationText(data.education),
     contact_emails: (data.contact_emails || []).join('\n') };
   const form = buildForm(WEBSITE_FIELDS, initial);
@@ -77,6 +77,6 @@ export async function viewWebsite({ sb, shell, loadingShell, friendly, setFlash,
     note.textContent = r.message;
     note.className = r.ok ? 'hint ok' : 'hint error';
   });
-  shell('Website', h('p', { class: 'lede' }, 'These details build the hero, about, education and Collaborate pages of your public website.'),
+  shell({ title: 'SM Website edit', eyebrow: 'Profile', sub: 'These details build the hero, about, education and Collaborate pages of your public website.' },
     form.el, h('div', { class: 'actions' }, btn, pub), note);
 }

@@ -1,6 +1,8 @@
 import { sb } from './supabase.js';
 import { TURNSTILE_SITE_KEY } from './config.js';
 import { h } from './dom.js';
+import { icon, iconLink, deleteButton, dataTable, pill } from './ui.js';
+import { COLUMNS, dateCell, fallbackColumns } from './columns.js';
 import { buildForm } from './forms.js';
 import { buildRow } from './rules.js';
 import { loadLookups, resolveOptions } from './lookups.js';
@@ -28,18 +30,6 @@ function friendly(error) {
 }
 function setFlash(kind, text) { state.flash = { kind, text }; }
 
-// The spreadsheet code loads only when the button is pressed, so it never slows the first page load.
-async function downloadTemplate(ev) {
-  const btn = ev.currentTarget;
-  btn.disabled = true;
-  try {
-    const { downloadTemplate: build } = await import('./import-template.js');
-    await build();
-  } catch (e) {
-    setFlash('error', `Could not build the template. ${friendly(e)}`);
-    route();
-  } finally { btn.disabled = false; }
-}
 function takeFlash() { const f = state.flash; state.flash = null; return f ? h('div', { class: `flash ${f.kind}`, role: 'status' }, f.text) : null; }
 function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = on ? 'Working…' : label; }
 
@@ -57,18 +47,54 @@ async function loadProfile() {
 /* ---------- shell ---------- */
 function shell(title, ...content) { return render(title, true, content); }
 function loadingShell(title) { return render(title, false, [h('p', {}, 'Loading…')]); }
+// `title` is a string, or { title, eyebrow, sub, action: { href, label } } for the large page heading in the dark band.
 function render(title, withFlash, content) {
-  const nav = state.session ? h('nav', {},
-    h('a', { href: '#/' }, 'Home'),
-    h('a', { href: '#/profile' }, 'Profile'),
-    h('a', { href: '#/reports', title: 'Build and download the Scientist Profile (Word) or CV (Excel)' }, 'Download reports'),
-    state.isOwner ? h('a', { href: '#/website' }, 'Website') : null,
-    h('a', { href: '#/import' }, 'Upload'),
-    h('button', { class: 'link', title: 'Download the Excel workbook for uploading past records', onclick: downloadTemplate }, 'Template'),
-    h('button', { class: 'link', onclick: async () => { await sb.auth.signOut(); } }, 'Sign out')) : null;
+  const hero = typeof title === 'object' && title ? title : { title };
+  const hash = location.hash || '#/';
+  const at = (...starts) => starts.some((x) => hash === x || hash.startsWith(`${x}/`));
+  const onProfile = at('#/profile', '#/import', '#/website');
+  const onReports = at('#/reports', '#/report');
+  const link = (href, label, on) => h('a', { class: `nav-link${on ? ' on' : ''}`, href, 'aria-current': on ? 'page' : false }, label);
+  const nav = state.session ? h('nav', { class: 'main-nav', 'aria-label': 'Main' },
+    link('#/', 'Home', !onProfile && !onReports),
+    link('#/reports', 'Reports', onReports),
+    profileMenu(onProfile)) : null;
+  const heading = hero.title ? h('div', { class: 'hero' },
+    h('div', {},
+      hero.eyebrow ? h('p', { class: 'eyebrow' }, hero.eyebrow) : null,
+      h('h1', {}, hero.title),
+      hero.sub ? h('p', { class: 'hero-sub' }, hero.sub) : null),
+    hero.action ? h('a', { class: 'btn light', href: hero.action.href }, icon('plus', 16), hero.action.label) : null) : null;
   root.replaceChildren(
-    h('header', { class: 'top' }, h('a', { class: 'brand', href: '#/' }, 'Scientist Profile'), nav),
-    h('main', {}, title ? h('h1', {}, title) : null, withFlash ? takeFlash() : null, ...content));
+    h('header', { class: 'band' }, h('div', { class: 'band-in' },
+      h('div', { class: 'top' }, h('a', { class: 'brand', href: '#/' }, 'Scientist Profile'), nav), heading)),
+    h('main', {}, withFlash ? takeFlash() : null, ...content));
+}
+
+// The Profile drop-down. One document-level listener serves every render, so menus never pile up listeners.
+let closeMenu = null;
+document.addEventListener('click', (ev) => { if (closeMenu && !ev.target.closest('.pm')) closeMenu(); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && closeMenu) closeMenu(); });
+function profileMenu(active) {
+  const btn = h('button', { type: 'button', class: `pm-btn${active ? ' on' : ''}`, 'aria-haspopup': 'true', 'aria-expanded': 'false', 'aria-controls': 'pm-list' },
+    'Profile', icon('chevron', 16));
+  const item = (href, label) => h('a', { role: 'menuitem', href }, label);
+  const list = h('div', { id: 'pm-list', class: 'pm-list', role: 'menu', hidden: true },
+    item('#/profile', 'My profile details'),
+    item('#/import', 'Bulk upload'),
+    state.isOwner ? item('#/website', 'SM Website edit') : null,
+    h('hr'),
+    h('button', { type: 'button', role: 'menuitem', class: 'out', onclick: async () => { await sb.auth.signOut(); } }, 'Sign out'));
+  const wrap = h('div', { class: 'pm' }, btn, list);
+  const close = () => { list.hidden = true; btn.setAttribute('aria-expanded', 'false'); if (closeMenu === close) closeMenu = null; };
+  btn.addEventListener('click', () => {
+    if (!list.hidden) return close();
+    if (closeMenu) closeMenu();
+    list.hidden = false; btn.setAttribute('aria-expanded', 'true'); closeMenu = close;
+    const first = list.querySelector('a'); if (first) first.focus();
+  });
+  list.addEventListener('click', (ev) => { if (ev.target.closest('a')) close(); });
+  return wrap;
 }
 
 /* ---------- login ---------- */
@@ -140,7 +166,7 @@ function viewHome() {
       others.length ? h('details', { class: 'others' }, h('summary', {}, 'Others (less used)'), h('div', { class: 'tiles' }, others)) : null,
     ];
   });
-  shell(p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome',
+  shell({ title: p && p.full_name ? `Hello, ${p.full_name.split(' ')[0]}` : 'Welcome', eyebrow: 'Home', sub: 'Choose a section to add or review your records.' },
     needProfile ? h('div', { class: 'flash warn' }, 'Complete your profile first. The joining date decides which entries count as "before joining". ',
       h('a', { href: '#/profile' }, 'Open profile')) : null,
     body);
@@ -182,7 +208,7 @@ function viewProfile() {
     else { await loadProfile(); setFlash('ok', 'Profile saved.'); }
     viewProfile();
   });
-  shell('Profile', h('p', { class: 'lede' }, 'These details fill the header of your Word profile.'), form.el, h('div', { class: 'actions' }, btn));
+  shell({ title: 'My profile details', eyebrow: 'Profile', sub: 'These details fill the header of your Word profile.' }, form.el, h('div', { class: 'actions' }, btn));
 }
 
 /* ---------- section page: entries with filters ---------- */
@@ -238,26 +264,25 @@ async function viewList(key) {
   const panel = h('details', { class: 'filters', open: isFiltered({ ...f, q: '' }) }, h('summary', {}, 'Filters'), h('div', { class: 'fl-grid' }, controls), clear);
   drawCustom();
 
-  function row(e) {
-    const del = h('button', { class: 'link danger' }, 'Delete');
-    let armed = null;
-    del.addEventListener('click', async () => {
-      if (!armed) {
-        del.textContent = 'Tap again to confirm';
-        armed = setTimeout(() => { armed = null; del.textContent = 'Delete'; }, 4000);
-        return;
-      }
-      clearTimeout(armed);
-      const { error: er } = await sb.from('entries').delete().eq('id', e.id);
-      if (!er && key === 'project') await sb.from('summaries').delete().eq('project_id', e.id);
-      setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Entry deleted.');
-      viewList(key);
-    });
-    return h('li', { class: 'row' },
-      h('div', { class: 'row-main' }, sec.summary(e), e.before_joining ? h('span', { class: 'tag' }, 'before joining') : null,
-        state.isOwner && e.is_public ? h('span', { class: 'tag ok' }, e.is_featured ? 'on website, featured' : 'on website') : null),
-      h('div', { class: 'row-actions' }, h('a', { href: `#/s/${key}/${e.id}` }, 'Edit'), del));
+  const cols = [
+    { label: 'Date', cls: 'dt-date', get: (e) => dateCell(e) },
+    ...(COLUMNS[key] || fallbackColumns(sec)),
+    ...(state.isOwner ? [{ label: 'Website', get: (e) => (e.is_public ? pill(e.is_featured ? 'On home page' : 'On website', 'ok') : pill('Private')) }] : []),
+  ];
+  // The "before joining" mark rides along in the first text column so it needs no column of its own.
+  const first = cols.findIndex((c) => c.primary);
+  if (sec.beforeJoining && first > -1) {
+    const base = cols[first].get;
+    cols[first] = { ...cols[first], get: (e) => [base(e), e.before_joining ? pill('before joining', 'warn') : null] };
   }
+
+  const remove = async (e) => {
+    const { error: er } = await sb.from('entries').delete().eq('id', e.id);
+    if (!er && key === 'project') await sb.from('summaries').delete().eq('project_id', e.id);
+    setFlash(er ? 'error' : 'ok', er ? friendly(er) : 'Entry deleted.');
+    viewList(key);
+  };
+  const actions = (e) => [iconLink(`#/s/${key}/${e.id}`, 'Edit this entry'), deleteButton('Delete this entry', () => remove(e))];
 
   function draw() {
     const rows = applyFilters(data, f, sec.summary);
@@ -268,13 +293,13 @@ async function viewList(key) {
     else {
       const more = rows.length > shown
         ? h('button', { class: 'secondary', onclick: () => { shown += PAGE; draw(); } }, `Show ${Math.min(PAGE, rows.length - shown)} more`) : null;
-      listBox.replaceChildren(h('ul', { class: 'rows' }, rows.slice(0, shown).map(row)), more);
+      listBox.replaceChildren(...[dataTable({ columns: cols, rows: rows.slice(0, shown), actions, caption: sec.label }), more].filter(Boolean));
     }
   }
 
-  shell(sec.label,
-    h('div', { class: 'toolbar' }, h('a', { class: 'btn primary', href: `#/s/${key}/new` }, 'Add entry')),
-    data.length ? [search, panel] : null, status, listBox);
+  const group = HOME_GROUPS.find((g) => [...g.keys, ...(g.others || [])].includes(key));
+  shell({ title: sec.label, eyebrow: group ? group.name : false, sub: sec.blurb, action: { href: `#/s/${key}/new`, label: 'Add entry' } },
+    data.length ? h('div', { class: 'find' }, search) : null, data.length ? panel : null, status, listBox);
   draw();
 }
 
@@ -353,7 +378,7 @@ async function viewEntry(key, id) {
     return b;
   };
   form.onChange(() => { delete dupBox.dataset.ok; dupBox.hidden = true; });
-  shell(entry ? `Edit: ${sec.label}` : `New: ${sec.label}`,
+  shell({ title: entry ? 'Edit entry' : 'New entry', eyebrow: sec.label },
     joining || !sec.beforeJoining ? null : h('div', { class: 'flash warn' }, 'Add your joining date in your ', h('a', { href: '#/profile' }, 'profile'), ' so "before joining" is ticked for you.'),
     lookupFailed ? h('div', { class: 'flash warn' }, 'Could not load the team and research-area lists. Reload the page before saving, or the team may be left blank.') : null,
     form.el, dupBox, msg,
