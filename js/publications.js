@@ -81,16 +81,17 @@ export async function viewPublications({ sb, shell, loadingShell, friendly, stat
   ];
 
   /* ----- pieces ----- */
+  // A real tick box: big tap target, works with a keyboard and a screen reader without extra code.
   function sw(e, which, text) {
     const on = which === 'public' ? !!e.is_public : !!e.is_featured;
     const blocked = which === 'home' && !e.is_public;
-    const b = h('button', {
-      type: 'button', class: `sw${on ? ' on' : ''}`, role: 'switch', 'aria-checked': on ? 'true' : 'false',
-      'aria-label': `${text}: ${on ? 'on' : 'off'}`, 'data-sw': `${e.id}:${which}`,
+    const b = h('input', {
+      type: 'checkbox', class: 'cb', checked: on, 'aria-label': text, 'data-sw': `${e.id}:${which}`,
       title: blocked ? 'Turn on Public view first' : text,
-    }, h('span', { class: 'sw-knob' }));
+    });
+    b.checked = on;
     if (blocked) b.disabled = true;
-    b.addEventListener('click', () => setFlags(e, which));
+    b.addEventListener('change', () => setFlags(e, which));
     return b;
   }
   const titleNode = (e) => {
@@ -133,8 +134,8 @@ export async function viewPublications({ sb, shell, loadingShell, friendly, stat
       meta ? h('p', { class: 'pub-meta' }, meta) : null,
       owner && areasLine !== '–' ? h('p', { class: 'pub-areas' }, areasLine) : null,
       owner ? h('div', { class: 'sw-rows' },
-        h('div', { class: 'sw-row' }, h('span', {}, 'Public view'), sw(e, 'public', 'Public view')),
-        h('div', { class: 'sw-row' }, h('span', {}, 'Home page view'), sw(e, 'home', 'Home page view'))) : null,
+        h('label', { class: 'sw-row' }, h('span', {}, 'Public view'), sw(e, 'public', 'Public view')),
+        h('label', { class: 'sw-row' }, h('span', {}, 'Home page view'), sw(e, 'home', 'Home page view'))) : null,
       h('div', { class: 'dt-btns pub-card-act' }, actionsOf(e)));
   }
 
