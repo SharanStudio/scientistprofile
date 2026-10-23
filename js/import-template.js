@@ -11,7 +11,8 @@ export const EXAMPLES = {
   support: { kind: 'Programme support', programme: 'IDSP', level: 'State', states: ['Tamil Nadu', 'Kerala'], support_types: ['Capacity building', 'Secondary data analysis'], start_date: '2023-01-10' },
   peer_review: { journal: 'Example Journal of Epidemiology', role: 'Reviewer', start_date: '2024-02-01' },
   publication: {
-    kind: 'Research publication', citation: 'Author A, Author B. Example title of the article. Example J Epidemiol. 2024;12(3):45-52.',
+    kind: 'Research publication', title: 'Example title of the article', journal_name: 'Example Journal of Epidemiology',
+    citation: 'Author A, Author B. Example title of the article. Example J Epidemiol. 2024;12(3):45-52.',
     start_date: '2024-07-01', doi: '10.1000/example.2024.001', roles: ['First author', 'Corresponding author'], journal_level: 'International',
     type: 'Original article', in_pubmed: 'Yes', impact_factor: 3.2, link: 'https://doi.org/10.1000/example.2024.001',
     summary: 'Example summary of up to fifty words.', is_public: true, is_featured: false,
@@ -164,7 +165,7 @@ export function buildTemplate(ExcelJS, lookups = {}) {
     ['Good to know', 'head'],
     ['Peer review and Publication rows dated before your joining date are tagged "before joining" automatically.', ''],
     ['Yes/No columns (website, consent, research areas) take Yes or No from the dropdown. A blank cell counts as No, so nothing becomes public unless you say Yes.', ''],
-    ['Publication: give Yes for at least one research area. Research publications need a DOI and a link. Feature on home page counts only when Show on public website is Yes.', ''],
+    ['Publication: every row needs a Title. Research publications also need a Journal name, a DOI and a link. Give Yes for at least one research area. Feature on home page counts only when Show on public website is Yes.', ''],
     ['Mentee: Show on public website needs "Mentee agreed to be named" = Yes.', ''],
     ['People: only an admin account can import this sheet. Add team membership in the app afterwards. The photo path is a path inside the website assets folder.', ''],
     ['Policy, Achievements, Projects, Teams and One-page summaries are not in this workbook. Enter them in the app.', ''],
