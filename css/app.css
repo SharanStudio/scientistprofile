@@ -215,12 +215,9 @@ table.dt{width:100%;border-collapse:collapse}
 .acc .dt-wrap{margin-top:0;overflow-x:auto}
 .pub-title{font-weight:500}
 .pub-missing{color:var(--bad);font-weight:600;text-decoration:underline}
-.sw{position:relative;width:48px;height:28px;flex:none;border:1px solid #C9CDD4;border-radius:999px;background:var(--soft);cursor:pointer;padding:0}
-.sw-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .15s}
-.sw.on{background:var(--amber);border-color:var(--amber)}
-.sw.on .sw-knob{transform:translateX(20px)}
-.sw:disabled{opacity:.4;cursor:not-allowed}
-.sw:focus-visible,.ib:focus-visible,.seg-b:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.cb{width:26px;height:26px;margin:0;flex:none;accent-color:var(--amber);cursor:pointer}
+.cb:disabled{opacity:.35;cursor:not-allowed}
+.cb:focus-visible,.ib:focus-visible,.seg-b:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
 .ib:disabled{opacity:.35;cursor:not-allowed}
 .ib:disabled:hover{border-color:#C9CDD4}
 .pub-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:4px 0 10px}
@@ -236,5 +233,16 @@ table.dt{width:100%;border-collapse:collapse}
 @media (max-width:700px){
   .acc{padding:0 12px 6px}
   .pub-cards{grid-template-columns:1fr}
-  .dt td .sw{justify-self:start}
+  .dt td .cb{justify-self:start}
+  .acc .dt-btns{display:flex}
 }
+
+/* Publications table: tighter columns so Year and Title stay in view; icons stacked two by two */
+.acc .dt td{padding:14px 8px}
+.acc .dt th{padding:12px 8px 8px}
+.acc .dt td:first-child,.acc .dt th:first-child{padding-left:0}
+.acc .dt th.dt-date{width:4.5rem}
+.acc .dt td.dt-primary{min-width:12rem}
+.acc .dt-btns{display:grid;grid-template-columns:repeat(2,44px);gap:6px}
+.acc .dt-btns.pub-card-act{display:flex}
+@media (max-width:700px){.acc .dt-btns{display:flex}}
