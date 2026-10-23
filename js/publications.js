@@ -1,11 +1,11 @@
 import { h } from './dom.js';
 import { icon, iconLink, iconButton, deleteButton, dataTable, pill } from './ui.js';
 import { loadLookups } from './lookups.js';
-import { splitKinds, matchesQuery, yearOf, areasText, flagPatch, displayNum } from './pub-data.js';
+import { splitKinds, matchesQuery, yearOf, flagPatch, displayNum } from './pub-data.js';
 
 // The Publications page: two accordions (research, non-research), each as a table or as cards.
 // Public view and Home page view are switches that save the moment you flip them. Only the site owner sees the
-// website columns, the areas of interest and the switches, as on the entry forms.
+// website columns and the switches, as on the entry forms. Areas of interest are set in the entry form only; the search box still finds them.
 const VIEW_KEY = 'sp.pubView';
 const SECTION = 'publication';
 
@@ -105,7 +105,6 @@ export async function viewPublications({ sb, shell, loadingShell, friendly, stat
   const siteCols = () => (owner ? [
     { label: 'Public view', get: (e) => sw(e, 'public', 'Public view') },
     { label: 'Home page view', get: (e) => sw(e, 'home', 'Home page view') },
-    { label: 'Areas of interest', get: (e) => areasText(e, areas) },
   ] : []);
   const researchCols = [
     { label: 'Year', cls: 'dt-date', get: (e) => yearOf(e) },
@@ -127,12 +126,10 @@ export async function viewPublications({ sb, shell, loadingShell, friendly, stat
     const meta = isResearch
       ? [d.journal_name, d.impact_factor != null && d.impact_factor !== '' ? `IF ${d.impact_factor}` : null].filter(Boolean).join(' · ')
       : d.nr_type || '';
-    const areasLine = owner ? areasText(e, areas) : '–';
     return h('article', { class: 'pub-card' },
       h('div', { class: 'pub-card-top' }, h('span', { class: 'pub-year' }, yearOf(e)), isResearch ? null : pill(d.nr_type || 'Non-research')),
       h('h3', { class: 'pub-card-title' }, titleNode(e)),
       meta ? h('p', { class: 'pub-meta' }, meta) : null,
-      owner && areasLine !== '–' ? h('p', { class: 'pub-areas' }, areasLine) : null,
       owner ? h('div', { class: 'sw-rows' },
         h('label', { class: 'sw-row' }, h('span', {}, 'Public view'), sw(e, 'public', 'Public view')),
         h('label', { class: 'sw-row' }, h('span', {}, 'Home page view'), sw(e, 'home', 'Home page view'))) : null,

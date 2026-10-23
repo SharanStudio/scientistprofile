@@ -226,7 +226,6 @@ table.dt{width:100%;border-collapse:collapse}
 .pub-year{font:700 1rem var(--display)}
 .pub-card-title{margin:0;font:600 1.05rem/1.35 var(--font);overflow-wrap:anywhere}
 .pub-meta{margin:0;color:var(--muted);font-size:.95rem}
-.pub-areas{margin:0;font-size:.9rem;color:var(--amber-text)}
 .sw-rows{display:grid;gap:6px}
 .sw-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.95rem}
 .pub-card-act{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);justify-content:flex-end;flex-wrap:wrap}
