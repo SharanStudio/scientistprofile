@@ -226,6 +226,9 @@ export const SECTIONS = {
     beforeJoining: true,
     fields: [
       { key: 'kind', type: 'select', label: 'What are you adding?', required: true, options: ['Research publication', 'Non-research publication'] },
+      { key: 'title', type: 'text', label: 'Title of the publication', required: true, max: 400, showIf: (v) => !!v.kind,
+        help: 'The title as printed. It shows in the Publications list.' },
+      { key: 'journal_name', type: 'text', label: 'Journal name', required: true, max: 200, showIf: (v) => v.kind === 'Research publication' },
       { key: 'citation', type: 'textarea', label: 'Vancouver citation', required: true, rows: 4, max: 1200, showIf: (v) => !!v.kind,
         help: 'Paste the full citation.' },
       { key: 'start_date', col: true, type: 'date', label: 'Publication date', showIf: (v) => !!v.kind, required: true,
@@ -234,7 +237,8 @@ export const SECTIONS = {
       { key: 'nr_type', type: 'select', label: 'Type', required: true, options: ['Book chapter', 'Guideline', 'Monograph', 'Newsletter', 'Report', 'Other'],
         showIf: (v) => v.kind === 'Non-research publication' },
       // Research
-      { key: 'doi', type: 'text', label: 'DOI', required: true, max: 200, showIf: (v) => v.kind === 'Research publication',
+      { key: 'doi', type: 'text', label: 'DOI', requiredIf: (v) => v.kind === 'Research publication', max: 200, showIf: (v) => !!v.kind,
+        help: 'Required for research publications. Optional for non-research items.',
         pattern: /^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)?10\.\d{4,9}\/\S+$/i, patternMsg: 'A DOI looks like 10.1016/j.example.2025.01.001',
         norm: (x) => x.replace(/^(?:https?:\/\/(?:dx\.)?doi\.org\/|doi:\s*)/i, '') },
       { key: 'pubid', type: 'text', label: 'PMID or PMCID', max: 20, showIf: (v) => v.kind === 'Research publication',

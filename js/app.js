@@ -13,6 +13,7 @@ import { viewReports, viewReportBuilder } from './reports.js';
 import { viewImport } from './import-view.js';
 import { viewWebsite } from './website.js';
 import { viewTeam } from './team.js';
+import { viewPublications } from './publications.js';
 
 const root = document.getElementById('app');
 const state = { session: null, profile: null, isOwner: false, flash: null, filters: {} };
@@ -402,6 +403,7 @@ async function route() {
     if (parts[0] === 'reports') return await viewReports(ctx);
     if (parts[0] === 'report') return await viewReportBuilder(ctx, parts[1]);
     if (parts[0] === 's' && parts[1] && parts[2]) return await viewEntry(parts[1], parts[2]);
+    if (parts[0] === 's' && parts[1] === 'publication') return await viewPublications(ctx);
     if (parts[0] === 's' && parts[1]) return await viewList(parts[1]);
     return viewHome();
   } catch (e) {

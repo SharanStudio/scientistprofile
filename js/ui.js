@@ -11,6 +11,8 @@ const PATHS = {
   up: '<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>',
   down: '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/>',
 };
 export function icon(name, size = 18) {
   const s = document.createElement('span');
