@@ -12,6 +12,7 @@ const PATHS = {
   down: '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  sort: '<path d="M8 4v16"/><path d="M4 8l4-4 4 4"/><path d="M16 20V4"/><path d="M12 16l4 4 4-4"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/>',
 };
 export function icon(name, size = 18) {
@@ -48,8 +49,21 @@ export const deleteButton = (label, onConfirm) => iconButton('bin', label, onCon
 // A table that becomes a stack of cards on phones. Each cell carries its column name in data-label.
 //   columns: [{ label, get(row) -> text or node, cls?, primary? }]
 //   actions(row) -> array of nodes shown at the end of the row (omit for none)
-export function dataTable({ columns, rows, actions, caption }) {
-  const head = h('tr', {}, columns.map((c) => h('th', { scope: 'col', class: c.cls || false }, c.label)),
+//   sort + onSort(key): give a column a sortKey and its heading becomes a sort button. sort = { key, dir } or null.
+export function dataTable({ columns, rows, actions, caption, sort = null, onSort = null }) {
+  const headCell = (c) => {
+    if (!c.sortKey || !onSort) return h('th', { scope: 'col', class: c.cls || false }, c.label);
+    const on = sort && sort.key === c.sortKey;
+    const dir = on ? sort.dir : null;
+    const b = h('button', {
+      type: 'button', class: `th-sort${on ? ' on' : ''}`, 'data-sort': c.sortKey,
+      'aria-label': `Sort by ${c.label}${on ? (dir === 'asc' ? ', now ascending' : ', now descending') : ''}`,
+      title: `Sort by ${c.label}`,
+    }, c.label, icon(on ? (dir === 'asc' ? 'up' : 'down') : 'sort', 14));
+    b.addEventListener('click', () => onSort(c.sortKey));
+    return h('th', { scope: 'col', class: c.cls || false, 'aria-sort': on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none' }, b);
+  };
+  const head = h('tr', {}, columns.map(headCell),
     actions ? h('th', { scope: 'col', class: 'dt-act' }, h('span', { class: 'sr' }, 'Actions')) : null);
   const body = rows.map((r) => h('tr', {},
     columns.map((c) => h('td', { 'data-label': c.label, class: `${c.cls || ''}${c.primary ? ' dt-primary' : ''}`.trim() || false }, c.get(r))),

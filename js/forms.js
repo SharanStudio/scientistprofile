@@ -74,7 +74,7 @@ export function buildForm(fields, initial = {}) {
         f.help ? h('div', { class: 'hint' }, f.help) : null, err);
     }
     return h('div', { class: 'field' },
-      h('label', { for: f.type === 'multicheck' ? false : id }, f.label, f.required ? h('span', { class: 'req', 'aria-hidden': 'true' }, ' *') : null),
+      h('label', { for: f.type === 'multicheck' ? false : id }, f.label, f.required || f.requiredIf ? h('span', { class: 'req', 'aria-hidden': 'true', hidden: !f.required }, ' *') : null),
       input, f.help ? h('div', { class: 'hint' }, f.help) : null, count, err);
   }
 
@@ -100,7 +100,14 @@ export function buildForm(fields, initial = {}) {
 
   function refresh() {
     const r = raw();
-    for (const f of fields) rows[f.key].hidden = !isVisible(f, r);
+    for (const f of fields) {
+      rows[f.key].hidden = !isVisible(f, r);
+      // A conditionally required field shows its * only while the condition holds.
+      if (f.requiredIf && !f.required) {
+        const star = rows[f.key].querySelector('.req');
+        if (star) star.hidden = !f.requiredIf(r);
+      }
+    }
   }
   function fire() { refresh(); listeners.forEach((fn) => fn(values())); }
 

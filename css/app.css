@@ -240,6 +240,16 @@ table.dt{width:100%;border-collapse:collapse}
 .acc .dt td{padding:14px 8px}
 .acc .dt th{padding:12px 8px 8px}
 .acc .dt td:first-child,.acc .dt th:first-child{padding-left:0}
+.th-sort{display:inline-flex;align-items:center;gap:4px;padding:2px 4px;margin:-2px -4px;min-height:0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+.th-sort .ico{opacity:.45}
+.th-sort:hover .ico,.th-sort:focus-visible .ico,.th-sort.on .ico{opacity:1}
+.th-sort.on{color:var(--ink)}
+.th-sort:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.pub-link{display:inline-flex;align-items:center;gap:4px;font-weight:600;text-decoration:none}
+.pub-link:hover,.pub-link:focus-visible{text-decoration:underline}
+.pubs-sort[hidden]{display:none}
+.pubs-sort{display:flex;align-items:center;gap:.5rem;margin:0 0 .8rem;font-size:.85rem;color:var(--muted)}
+.pubs-sort select{width:auto;min-height:0;font-size:.9rem}
 .acc .dt th.dt-date{width:4.5rem}
 .acc .dt td.dt-primary{min-width:12rem}
 .acc .dt-btns{display:grid;grid-template-columns:repeat(2,44px);gap:6px}
